@@ -1,0 +1,156 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node
+  labels:
+    app: pages-proxy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: node-anyuid
+  labels:
+    app: pages-proxy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+- kind: ServiceAccount
+  name: node
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sqlite-data
+  labels:
+    app: pages-proxy
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: thin-csi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pages-proxy
+  labels:
+    app: pages-proxy
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pages-proxy
+  template:
+    metadata:
+      labels:
+        app: pages-proxy
+    spec:
+      serviceAccountName: node
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: sqlite-data
+        persistentVolumeClaim:
+          claimName: sqlite-data
+      containers:
+      - name: sqlite
+        image: ubuntu:latest
+        securityContext:
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "Installing SQLite..."
+            apt-get update && apt-get install -y sqlite3
+            
+            SQLITE_CMD=$(which sqlite3 2>/dev/null || echo "")
+            
+            if [ -z "$SQLITE_CMD" ]; then
+              echo "SQLite command not found. Using 'sqlite3' directly"
+              SQLITE_CMD="sqlite3"
+            fi
+            
+            echo "SQLite command: $SQLITE_CMD"
+            
+            mkdir -p /app/db
+            if [ ! -f /app/db/pages.db ]; then
+              echo "Initializing SQLite database..."
+              $SQLITE_CMD /app/db/pages.db "CREATE TABLE IF NOT EXISTS pages (id INTEGER PRIMARY KEY, title TEXT, content TEXT);"
+              chmod 664 /app/db/pages.db
+              echo "Database created successfully."
+            else
+              echo "Database already exists."
+            fi
+            
+            echo "Database ready. Keeping container alive..."
+            trap 'echo "Received SIGTERM, shutting down SQLite container..."; exit 0' TERM
+            tail -f /dev/null & wait $!
+        volumeMounts:
+        - name: sqlite-data
+          mountPath: /app/db
+        env:
+        - name: DB_PATH
+          value: "/app/db/pages.db"
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 200m
+          requests:
+            memory: 128Mi
+            cpu: 100m
+      - name: app
+        image: registry.redcloud.land/github-apps/pages-proxy:012
+        securityContext:
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: sqlite-data
+          mountPath: /app/db
+        env:
+        - name: DB_PATH
+          value: "/app/db/pages.db"
+        envFrom:
+        - secretRef:
+            name: pages-proxy-env
+        resources:
+          limits:
+            memory: 512Mi
+            cpu: 300m
+          requests:
+            memory: 256Mi
+            cpu: 200m
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pages-proxy
+  labels:
+    app: pages-proxy
+spec:
+  type: NodePort
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30080
+    name: http
+  selector:
+    app: pages-proxy

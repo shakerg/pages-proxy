@@ -1,0 +1,6 @@
+.env
+pages.db*
+node_modules
+test*
+ProjectPlan
+pages-proxy-env-secret*

@@ -1,0 +1,22 @@
+{
+  "name": "pages-proxy",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.6.9",
+    "sqlite3": "^5.1.7",
+    "supertest": "^7.0.0",
+    "cloudflare": "^4.1.0"
+  }
+}
