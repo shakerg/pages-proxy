@@ -25,7 +25,9 @@ app.post('/test-store', async (req, res) => {
   try {
     const { repoName, pagesUrl, customDomain } = req.body;
     await database.testStorePagesUrl(repoName, pagesUrl, customDomain);
-    res.status(200).send('testStorePagesUrl executed successfully - database only, no Cloudflare operations');
+    res
+      .status(200)
+      .send('testStorePagesUrl executed successfully - database only, no Cloudflare operations');
   } catch (error) {
     console.error('Error in test-store:', error);
     res.status(500).send('testStorePagesUrl failed: ' + error.message);
@@ -37,7 +39,9 @@ app.post('/test-remove', async (req, res) => {
   try {
     const { repoName } = req.body;
     await database.testRemovePagesUrl(repoName);
-    res.status(200).send('testRemovePagesUrl executed successfully - database only, no Cloudflare operations');
+    res
+      .status(200)
+      .send('testRemovePagesUrl executed successfully - database only, no Cloudflare operations');
   } catch (error) {
     console.error('Error in test-remove:', error);
     res.status(500).send('testRemovePagesUrl failed: ' + error.message);
@@ -58,9 +62,9 @@ app.post('/update-cname', async (req, res) => {
 app.post('/refresh-token', async (req, res) => {
   try {
     const token = await generateToken();
-    res.status(200).json({ 
+    res.status(200).json({
       message: 'Token refreshed successfully',
-      tokenPreview: token.substring(0, 5) + '...' // Show just a preview for security
+      tokenPreview: token.substring(0, 5) + '...', // Show just a preview for security
     });
   } catch (error) {
     console.error('Error refreshing token:', error);
@@ -77,11 +81,11 @@ async function startServer() {
   try {
     console.log('Starting server initialization...');
     console.log('Generating initial GitHub App token...');
-    
+
     await generateToken();
-    
+
     setupTokenRefresh();
-    
+
     app.listen(port, () => {
       console.log(`Server is running on port ${port}`);
       console.log('Token refresh schedule is active');

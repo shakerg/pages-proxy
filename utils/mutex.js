@@ -23,9 +23,9 @@ class Mutex {
    */
   async acquire() {
     const current = this.locking;
-    
+
     let release;
-    
+
     this.locking = new Promise(resolve => {
       release = () => {
         this._locked = false;
@@ -35,12 +35,12 @@ class Mutex {
     });
 
     await current;
-    
+
     const stack = new Error().stack;
     this.owner = stack.split('\n').slice(2).join('\n');
-    
+
     this._locked = true;
-    
+
     return release;
   }
 

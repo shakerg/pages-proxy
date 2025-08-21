@@ -6,11 +6,17 @@
 const SENSITIVE_PATTERNS = [
   { regex: /(Bearer\s+)([A-Za-z0-9-._~+/]+=*)/g, replacement: '$1[REDACTED]' }, // Bearer tokens
   { regex: /(Authorization:\s*Bearer\s+)([A-Za-z0-9-._~+/]+=*)/g, replacement: '$1[REDACTED]' }, // Auth headers
-  { regex: /(token["']?\s*[=:]\s*["']?)([A-Za-z0-9-._~+/]+=*)(["']?)/g, replacement: '$1[REDACTED]$3' }, // Token assignments
+  {
+    regex: /(token["']?\s*[=:]\s*["']?)([A-Za-z0-9-._~+/]+=*)(["']?)/g,
+    replacement: '$1[REDACTED]$3',
+  }, // Token assignments
   { regex: /(password["']?\s*[=:]\s*["']?)(.+?)(["']?)/g, replacement: '$1[REDACTED]$3' }, // Passwords
   { regex: /(key["']?\s*[=:]\s*["']?)(.+?)(["']?)/g, replacement: '$1[REDACTED]$3' }, // API keys
   { regex: /(secret["']?\s*[=:]\s*["']?)(.+?)(["']?)/g, replacement: '$1[REDACTED]$3' }, // Secrets
-  { regex: /-----BEGIN[^-]+?PRIVATE KEY-----[^-]+?-----END[^-]+?PRIVATE KEY-----/gs, replacement: '[REDACTED PRIVATE KEY]' }, // Private keys
+  {
+    regex: /-----BEGIN[^-]+?PRIVATE KEY-----[^-]+?-----END[^-]+?PRIVATE KEY-----/gs,
+    replacement: '[REDACTED PRIVATE KEY]',
+  }, // Private keys
 ];
 
 /**
@@ -67,26 +73,26 @@ const logger = {
   error(...args) {
     console.error(`[ERROR] ${timestamp()}:`, ...formatArgs(args));
   },
-  
+
   warn(...args) {
     console.warn(`[WARN] ${timestamp()}:`, ...formatArgs(args));
   },
-  
+
   info(...args) {
     console.info(`[INFO] ${timestamp()}:`, ...formatArgs(args));
   },
-  
+
   debug(...args) {
     if (process.env.DEBUG) {
       console.debug(`[DEBUG] ${timestamp()}:`, ...formatArgs(args));
     }
   },
-  
+
   trace(...args) {
     if (process.env.TRACE) {
       console.trace(`[TRACE] ${timestamp()}:`, ...formatArgs(args));
     }
-  }
+  },
 };
 
 module.exports = logger;

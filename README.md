@@ -67,6 +67,7 @@ CLOUDFLARE_GLOBAL_API_KEY=<global_api_key>
 ```
 
 Notes:
+
 - The app supports providing the private key as either an environment variable (`GITHUB_APP_PRIVATE_KEY`) or by placing the PEM on disk and updating `jwt.js` to read it from a path. For containers and Kubernetes, prefer Secrets.
 - Keep webhook secret and API tokens private.
 

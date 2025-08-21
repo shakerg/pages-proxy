@@ -11,29 +11,29 @@ function sanitizeString(input) {
   if (input === null || input === undefined) {
     return null;
   }
-  
+
   if (typeof input !== 'string') {
     input = String(input);
   }
-  
+
   // Remove any SQL injection attempts - thanks Copilot!
   return input
     .replace(/'/g, "''") // Escape single quotes
-    .replace(/--/g, "")  // Remove SQL comments
-    .replace(/;/g, "")   // Remove semicolons
+    .replace(/--/g, '') // Remove SQL comments
+    .replace(/;/g, '') // Remove semicolons
     .trim();
 }
 
 /**
  * Validates a repo name follows the expected format (owner/repo)
- * @param {string} repoName - The repository name to validate 
+ * @param {string} repoName - The repository name to validate
  * @returns {boolean} True if the repository name is valid
  */
 function isValidRepoName(repoName) {
   if (!repoName || typeof repoName !== 'string') {
     return false;
   }
-  
+
   return /^[a-zA-Z0-9-_]+\/[a-zA-Z0-9-_]+$/.test(repoName);
 }
 
@@ -46,7 +46,7 @@ function isValidUrl(url) {
   if (!url || typeof url !== 'string') {
     return false;
   }
-  
+
   try {
     new URL(url);
     return true;
@@ -65,12 +65,14 @@ function isValidDomain(domain) {
     return false;
   }
 
-  return /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])+$/.test(domain);
+  return /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])+$/.test(
+    domain
+  );
 }
 
 module.exports = {
   sanitizeString,
   isValidRepoName,
   isValidUrl,
-  isValidDomain
+  isValidDomain,
 };

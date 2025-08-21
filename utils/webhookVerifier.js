@@ -6,7 +6,7 @@ const logger = require('./logger');
 
 /**
  * Verify the signature of a GitHub webhook request
- * 
+ *
  * @param {object} req - Express request object
  * @param {string} secret - The webhook secret
  * @returns {boolean} Whether the signature is valid
@@ -19,7 +19,7 @@ function verifyWebhookSignature(req, secret) {
     }
 
     const signature = req.headers['x-hub-signature-256'];
-    
+
     if (!signature) {
       logger.warn('No signature found in webhook request');
       return false;
@@ -57,5 +57,5 @@ function verifyWebhookSignature(req, secret) {
 }
 
 module.exports = {
-  verifyWebhookSignature
+  verifyWebhookSignature,
 };
