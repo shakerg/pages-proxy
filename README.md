@@ -1,3 +1,5 @@
+<img width="120" height="120" alt="AppLogo" src="https://github.com/user-attachments/assets/75bee55d-a13c-46ff-85e1-886b18d96951" />
+
 # GitHub Pages Proxy
 
 A service that connects GitHub Pages with Cloudflare DNS to enable custom domains for GitHub Pages sites.
