@@ -83,7 +83,7 @@ async function handlePagesEvent(payload) {
   
   try {
     const existingRecord = await fetchExistingDatabaseRecord(repoName);
-    console.log(`Existing record for ${repoName}:`, existingRecord);
+    console.log('Existing record for %s:', repoName, existingRecord);
     
     if (action === 'created' || action === 'updated') {
       await processCustomDomainChange(payload, existingRecord);
