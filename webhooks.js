@@ -362,7 +362,7 @@ async function fetchExistingDatabaseRecord(repoName) {
         }
         
         if (row) {
-          console.log(`Found existing database record for ${repoName}:`, row);
+          console.log('Found existing database record for %s:', repoName, row);
         } else {
           console.log(`No existing database record found for ${repoName}`);
         }
