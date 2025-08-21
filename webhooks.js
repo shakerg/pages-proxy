@@ -147,7 +147,7 @@ async function handlePageBuildEvent(payload) {
     let pagesResult;
     try {
       pagesResult = await fetchPagesCname(repoName);
-      console.log(`Current Pages API result for ${repoName}:`, pagesResult);
+      console.log('Current Pages API result for %s:', repoName, pagesResult);
     } catch (error) {
       if (error.status === 404) {
         console.log(`No GitHub Pages site found for ${repoName} (404 response)`);
