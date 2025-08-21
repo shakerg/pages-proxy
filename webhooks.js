@@ -29,19 +29,19 @@ async function handleWebhook(req, res) {
 
   try {
     await checkAndRefreshToken();
-        switch (event) {
-      case 'repository':
-        await handleRepositoryEvent(payload);
-        break;
-      case 'page_build':
-        await handlePageBuildEvent(payload);
-        break;
-      case 'pages':
-        await handlePagesEvent(payload);
-        break;
+    switch (event) {
+    case 'repository':
+      await handleRepositoryEvent(payload);
+      break;
+    case 'page_build':
+      await handlePageBuildEvent(payload);
+      break;
+    case 'pages':
+      await handlePagesEvent(payload);
+      break;
       // Add more event handlers as needed
-      default:
-        console.log(`Unhandled event: ${event}`);
+    default:
+      console.log(`Unhandled event: ${event}`);
     }
     
     res.status(200).end();
@@ -83,7 +83,7 @@ async function handlePagesEvent(payload) {
   
   try {
     const existingRecord = await fetchExistingDatabaseRecord(repoName);
-    console.log(`Existing record for ${repoName}:`, existingRecord);
+    logger.info('Existing record for %s:', repoName, existingRecord);
     
     if (action === 'created' || action === 'updated') {
       await processCustomDomainChange(payload, existingRecord);
@@ -142,12 +142,12 @@ async function handlePageBuildEvent(payload) {
   
   try {
     const existingRecord = await fetchExistingDatabaseRecord(repoName);
-    console.log(`Existing record for ${repoName}:`, existingRecord);
+    logger.info('Existing record for %s:', repoName, existingRecord);
     console.log(`Fetching current CNAME for ${repoName} from GitHub Pages API...`);
     let pagesResult;
     try {
       pagesResult = await fetchPagesCname(repoName);
-      console.log(`Current Pages API result for ${repoName}:`, pagesResult);
+      logger.info('Current Pages API result for %s:', repoName, pagesResult);
     } catch (error) {
       if (error.status === 404) {
         console.log(`No GitHub Pages site found for ${repoName} (404 response)`);
@@ -323,7 +323,7 @@ async function fetchCnameFile(repoName) {
         if (error.status === 404) {
           console.log(`No CNAME file in default branch ${repoData.default_branch}`);
         } else {
-          console.error(`Error fetching CNAME file from default branch:`, error.status || error.message);
+          console.error('Error fetching CNAME file from default branch:', error.status || error.message);
         }
       }
     }
@@ -335,7 +335,7 @@ async function fetchCnameFile(repoName) {
     if (error.status === 404) {
       console.log(`Repository not found: ${repoName}`);
     } else {
-      console.error(`Error getting repository information:`, error.status || error.message);
+      console.error('Error getting repository information:', error.status || error.message);
     }
     return null;
   }

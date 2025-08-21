@@ -11,12 +11,13 @@
   "description": "",
   "dependencies": {
     "@octokit/rest": "^21.1.1",
+    "cloudflare": "^4.1.0",
     "dotenv": "^16.4.7",
+    "eslint": "^8.57.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "node-fetch": "^2.6.9",
     "sqlite3": "^5.1.7",
-    "supertest": "^7.0.0",
-    "cloudflare": "^4.1.0"
+    "supertest": "^7.0.0"
   }
 }
