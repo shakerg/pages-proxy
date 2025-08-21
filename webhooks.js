@@ -6,6 +6,7 @@ let fetch;
 const db = require('./database');
 const cloudflare = require('./cloudflare');
 const { checkAndRefreshToken } = require('./utils/tokenManager');
+const logger = require('./utils/logger');
 
 async function getOctokit() {
   const { Octokit } = await import('@octokit/rest');
@@ -97,7 +98,7 @@ async function handlePagesEvent(payload) {
       }
     }
   } catch (error) {
-    console.error(`Error handling pages event for ${repoName}:`, error);
+    logger.error('Error handling pages event for %s:', repoName, error);
   }
 }
 
@@ -224,7 +225,7 @@ async function handlePageBuildEvent(payload) {
       }
     }
   } catch (error) {
-    console.error(`Error handling page_build event for ${repoName}:`, error);
+    logger.error('Error handling page_build event for %s:', repoName, error);
   }
 }
 
@@ -242,7 +243,7 @@ async function fetchPagesUrl(repoName) {
     if (error.status === 404) {
       console.log(`No GitHub Pages site found for repository: ${repoName}`);
     } else {
-      console.error(`Error fetching Pages URL for ${repoName}:`, error);
+      logger.error('Error fetching Pages URL for %s:', repoName, error);
     }
     return null;
   }
@@ -357,7 +358,7 @@ async function fetchExistingDatabaseRecord(repoName) {
         dbInstance.close();
         
         if (err) {
-          console.error(`Error querying database for ${repoName}:`, err);
+          logger.error('Error querying database for %s:', repoName, err);
           return reject(err);
         }
         
