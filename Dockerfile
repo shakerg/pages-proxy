@@ -7,9 +7,8 @@ WORKDIR /usr/src/app
 
 COPY package*.json ./
 
-RUN npm install --only=production && \
-    npm rebuild sqlite3 && \
-    npm install cloudflare@2.8.0
+RUN npm install --omit=dev && \
+    npm rebuild sqlite3
 
 COPY . .
 
