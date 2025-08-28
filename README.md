@@ -172,11 +172,44 @@ Ensure your service is reachable from GitHub (Ingress/LoadBalancer) and that the
 
 ### 5) CI/CD and container registry
 
-Build and push in CI to a registry (example GitHub Container Registry):
+#### Automated Build and Push with GitHub Actions
+
+The repository includes a GitHub Actions workflow that automatically builds and pushes the Docker image to GitHub Container Registry (GHCR):
+
+- **Triggers**: On push to `main`, pull requests, releases, and manual dispatch
+- **Registry**: `ghcr.io/shakerg/pages-proxy`
+- **Tags**: Automatic tagging based on branches, PRs, and semantic versions
+- **Platforms**: Multi-platform builds for `linux/amd64` and `linux/arm64`
+
+The workflow also creates downloadable artifacts with deployment scripts and metadata.
+
+#### Manual Build and Push
+
+Build and push manually to a registry (example GitHub Container Registry):
 
 ```bash
 docker build -t ghcr.io/<org>/pages-proxy:<tag> .
 docker push ghcr.io/<org>/pages-proxy:<tag>
+```
+
+#### Using the Pre-built Image
+
+Pull and run the latest image:
+
+```bash
+docker pull ghcr.io/shakerg/pages-proxy:latest
+
+docker run --rm -p 3000:3000 \
+  -e PORT=3000 \
+  -e GITHUB_APP_ID="$GITHUB_APP_ID" \
+  -e GITHUB_INSTALLATION_ID="$GITHUB_INSTALLATION_ID" \
+  -e GITHUB_WEBHOOK_SECRET="$GITHUB_WEBHOOK_SECRET" \
+  -e GITHUB_APP_PRIVATE_KEY="$GITHUB_APP_PRIVATE_KEY" \
+  -e CLOUDFLARE_ZONE_ID="$CLOUDFLARE_ZONE_ID" \
+  -e CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
+  -e CLOUDFLARE_EMAIL="$CLOUDFLARE_EMAIL" \
+  -e CLOUDFLARE_GLOBAL_API_KEY="$CLOUDFLARE_GLOBAL_API_KEY" \
+  ghcr.io/shakerg/pages-proxy:latest
 ```
 
 Update your Kubernetes manifests to reference the pushed image.

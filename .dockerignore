@@ -2,3 +2,11 @@ test
 pages.db*
 node_modules
 npm-debug.log
+.env
+.git
+.gitignore
+README.md
+.eslintrc.js
+.prettierrc
+*.md
+.github
