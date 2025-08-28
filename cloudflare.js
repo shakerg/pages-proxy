@@ -8,7 +8,7 @@ const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const CLOUDFLARE_EMAIL = process.env.CLOUDFLARE_EMAIL;
 const CLOUDFLARE_GLOBAL_API_KEY = process.env.CLOUDFLARE_GLOBAL_API_KEY;
-const CLOUDFLARE_TARGET_DOMAIN = process.env.CLOUDFLARE_TARGET_DOMAIN || 'vault-tec-foundation.github.io';
+const CLOUDFLARE_TARGET_DOMAIN = process.env.CLOUDFLARE_TARGET_DOMAIN;
 
 const cf = new cloudflare({
   token: process.env.CLOUDFLARE_API_TOKEN
