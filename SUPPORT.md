@@ -26,14 +26,7 @@ Found a bug or something isn't working as expected? [Create an issue](../../issu
 - Relevant configuration (environment variables, without sensitive values)
 - Steps to reproduce
 
-### 4. Email Support
-For urgent issues or sensitive matters, you can reach out directly:
-- **Email:** [Include contact email if available]
-- **Response time:** Best effort within 2-3 business days
-
 ## Troubleshooting Tips
-
-Before contacting support, try these common solutions:
 
 ### `secretOrPrivateKey must have a value`
 - Ensure `GITHUB_APP_PRIVATE_KEY` is set correctly with proper newlines
@@ -68,16 +61,9 @@ See the [README.md](README.md) for development setup instructions.
 ## Security Concerns
 
 If you discover a security vulnerability, please **do not** open a public issue. Instead:
-- Email security concerns directly to [include security contact email if available]
+- Email security concerns directly to me at shakerg@github.com
 - Include details about the vulnerability without publicly disclosing it
 - Allow time for a fix before public disclosure
-
-## Response Times
-
-We aim to respond to support requests as follows:
-- **Critical bugs:** Within 24 hours
-- **General questions:** Within 2-3 business days
-- **Feature requests:** Reviewed periodically
 
 ## Additional Resources
 
