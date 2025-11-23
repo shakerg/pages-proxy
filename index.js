@@ -62,14 +62,15 @@ app.get('/setup', setupPageLimiter, async (req, res) => {
   try {
     const installationId = req.query.installation_id;
     
-    if (!installationId) {
-      return res.status(400).send('Missing installation_id parameter');
+    // XSS protection: validate installation_id is numeric before using in HTML
+    if (!installationId || !/^\d+$/.test(installationId)) {
+      return res.status(400).send('Invalid or missing installation_id parameter. Must be a numeric GitHub App installation ID.');
     }
     
     const htmlPath = path.join(__dirname, 'views', 'setup.html');
     let html = fs.readFileSync(htmlPath, 'utf8');
     
-    // Replace template variables
+    // Replace template variables (safe: validated as numeric above)
     html = html.replace(/{{INSTALLATION_ID}}/g, installationId);
     
     res.setHeader('Content-Type', 'text/html');
