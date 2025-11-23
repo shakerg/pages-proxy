@@ -1,5 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 const { sanitizeString, isValidRepoName, isValidUrl, isValidDomain } = require('./utils/sanitize');
+const { encrypt, decrypt, isEncrypted } = require('./utils/encryption');
 const cloudflare = require('./cloudflare');
 
 const dbPath = process.env.DB_PATH || 'pages.db';
@@ -39,6 +40,15 @@ db.serialize(() => {
     token TEXT,
     expires_at TEXT,
     created_at TEXT
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS installations (
+    installation_id INTEGER PRIMARY KEY,
+    cloudflare_zone_id TEXT,
+    cloudflare_api_token TEXT,
+    cloudflare_email TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
   
   console.log('Database tables initialized');
@@ -683,6 +693,114 @@ async function testRemovePagesUrl(repoName) {
   });
 }
 
+function storeInstallationConfig(installationId, zoneId, apiToken, email = null) {
+  return new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+    
+    // Encrypt the API token before storing
+    let encryptedToken;
+    try {
+      encryptedToken = encrypt(apiToken);
+    } catch (error) {
+      console.error('Error encrypting API token:', error);
+      return reject(new Error('Failed to encrypt API token: ' + error.message));
+    }
+    
+    db.run(
+      `INSERT OR REPLACE INTO installations (installation_id, cloudflare_zone_id, cloudflare_api_token, cloudflare_email, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [installationId, zoneId, encryptedToken, email, now],
+      function(err) {
+        if (err) {
+          console.error('Error storing installation config:', err);
+          return reject(err);
+        }
+        console.log(`Stored encrypted config for installation ${installationId}`);
+        resolve({ installation_id: installationId });
+      }
+    );
+  });
+}
+
+function getInstallationConfig(installationId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      'SELECT * FROM installations WHERE installation_id = ?',
+      [installationId],
+      (err, row) => {
+        if (err) {
+          console.error('Error fetching installation config:', err);
+          return reject(err);
+        }
+        
+        if (!row) {
+          return resolve(null);
+        }
+        
+        // Decrypt the API token before returning
+        if (row.cloudflare_api_token) {
+          try {
+            row.cloudflare_api_token = decrypt(row.cloudflare_api_token);
+          } catch (error) {
+            console.error('Error decrypting API token for installation', installationId, ':', error);
+            return reject(new Error('Failed to decrypt stored credentials'));
+          }
+        }
+        
+        resolve(row);
+      }
+    );
+  });
+}
+
+function updateInstallationConfig(installationId, updates) {
+  return new Promise((resolve, reject) => {
+    const fields = [];
+    const values = [];
+    
+    if (updates.cloudflare_zone_id) {
+      fields.push('cloudflare_zone_id = ?');
+      values.push(updates.cloudflare_zone_id);
+    }
+    if (updates.cloudflare_api_token) {
+      // Encrypt the API token before updating
+      try {
+        const encryptedToken = encrypt(updates.cloudflare_api_token);
+        fields.push('cloudflare_api_token = ?');
+        values.push(encryptedToken);
+      } catch (error) {
+        console.error('Error encrypting API token:', error);
+        return reject(new Error('Failed to encrypt API token: ' + error.message));
+      }
+    }
+    if (updates.cloudflare_email !== undefined) {
+      fields.push('cloudflare_email = ?');
+      values.push(updates.cloudflare_email);
+    }
+    
+    if (fields.length === 0) {
+      return reject(new Error('No fields to update'));
+    }
+    
+    fields.push('updated_at = ?');
+    values.push(new Date().toISOString());
+    values.push(installationId);
+    
+    db.run(
+      `UPDATE installations SET ${fields.join(', ')} WHERE installation_id = ?`,
+      values,
+      function(err) {
+        if (err) {
+          console.error('Error updating installation config:', err);
+          return reject(err);
+        }
+        console.log(`Updated encrypted config for installation ${installationId}`);
+        resolve({ installation_id: installationId, changes: this.changes });
+      }
+    );
+  });
+}
+
 module.exports = { 
   storePagesUrl, 
   removePagesUrl, 
@@ -692,5 +810,8 @@ module.exports = {
   testRemovePagesUrl,
   storeToken,
   getStoredToken,
-  isTokenExpired
+  isTokenExpired,
+  storeInstallationConfig,
+  getInstallationConfig,
+  updateInstallationConfig
 };

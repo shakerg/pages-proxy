@@ -16,7 +16,70 @@ if (!fs.existsSync(path.join(__dirname, 'utils'))) {
   fs.mkdirSync(path.join(__dirname, 'utils'));
 }
 
+if (!fs.existsSync(path.join(__dirname, 'views'))) {
+  fs.mkdirSync(path.join(__dirname, 'views'));
+}
+
+// Use raw body parser for webhook signature verification
+app.use('/webhook', bodyParser.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString('utf8');
+  }
+}));
+
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Setup UI endpoints
+app.get('/setup', async (req, res) => {
+  try {
+    const installationId = req.query.installation_id;
+    
+    if (!installationId) {
+      return res.status(400).send('Missing installation_id parameter');
+    }
+    
+    const htmlPath = path.join(__dirname, 'views', 'setup.html');
+    let html = fs.readFileSync(htmlPath, 'utf8');
+    
+    // Replace template variables
+    html = html.replace(/{{INSTALLATION_ID}}/g, installationId);
+    
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    console.error('Error serving setup page:', error);
+    res.status(500).send('Failed to load setup page');
+  }
+});
+
+app.post('/setup/complete', async (req, res) => {
+  try {
+    const { installation_id, zone_id, api_token, email } = req.body;
+    
+    if (!installation_id || !zone_id || !api_token) {
+      return res.status(400).send('Missing required fields: installation_id, zone_id, or api_token');
+    }
+    
+    console.log(`Storing configuration for installation ${installation_id}`);
+    
+    await database.storeInstallationConfig(
+      parseInt(installation_id),
+      zone_id,
+      api_token,
+      email || null
+    );
+    
+    const htmlPath = path.join(__dirname, 'views', 'success.html');
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    console.error('Error saving configuration:', error);
+    res.status(500).send('Failed to save configuration: ' + error.message);
+  }
+});
 
 app.post('/webhook', webhooks.handleWebhook);
 

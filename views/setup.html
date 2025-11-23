@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pages Proxy - Setup</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            max-width: 600px;
+            width: 100%;
+            padding: 32px;
+        }
+        h1 {
+            color: #58a6ff;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        .subtitle {
+            color: #8b949e;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        .help-text {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #8b949e;
+        }
+        .help-text a {
+            color: #58a6ff;
+            text-decoration: none;
+        }
+        .help-text a:hover {
+            text-decoration: underline;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #238636;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #2ea043;
+        }
+        button:disabled {
+            background: #21262d;
+            color: #484f58;
+            cursor: not-allowed;
+        }
+        .warning {
+            background: #1f2937;
+            border: 1px solid #fbbf24;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        .warning-title {
+            color: #fbbf24;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .warning-text {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .footer {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #30363d;
+            font-size: 12px;
+            color: #8b949e;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Configure Pages Proxy</h1>
+        <p class="subtitle">Installation ID: <strong>{{INSTALLATION_ID}}</strong></p>
+
+        <div class="warning">
+            <div class="warning-title">⚠️ Important Security Notice</div>
+            <div class="warning-text">
+                Your Cloudflare credentials will be stored encrypted on our server. This service is provided AS-IS with NO WARRANTY. 
+                By proceeding, you accept all risks. See our <a href="https://github.com/shakerg/pages-proxy/blob/main/TERMS_OF_SERVICE.md" target="_blank">Terms of Service</a> for details.
+            </div>
+        </div>
+
+        <form action="/setup/complete" method="POST">
+            <input type="hidden" name="installation_id" value="{{INSTALLATION_ID}}">
+            
+            <div class="form-group">
+                <label for="zone_id">Cloudflare Zone ID</label>
+                <input type="text" id="zone_id" name="zone_id" required placeholder="e.g., 4c18a91971a6076b06ffdd7f469d829c">
+                <div class="help-text">
+                    Find this in your Cloudflare dashboard → Select your domain → Overview (right sidebar)
+                    <br><a href="https://developers.cloudflare.com/fundamentals/setup/find-account-and-zone-ids/" target="_blank">How to find Zone ID</a>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="api_token">Cloudflare API Token</label>
+                <input type="password" id="api_token" name="api_token" required placeholder="Your API token with DNS edit permissions">
+                <div class="help-text">
+                    Create a token with <strong>Zone → DNS → Edit</strong> permissions.
+                    <br><a href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/" target="_blank">How to create API token</a>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Cloudflare Email (Optional)</label>
+                <input type="text" id="email" name="email" placeholder="your-email@example.com">
+                <div class="help-text">
+                    Only needed if using legacy Global API Key authentication (not recommended)
+                </div>
+            </div>
+
+            <button type="submit">Save Configuration</button>
+        </form>
+
+        <div class="footer">
+            By using this service, you agree to our <a href="https://github.com/shakerg/pages-proxy/blob/main/TERMS_OF_SERVICE.md" target="_blank">Terms of Service</a> and <a href="https://github.com/shakerg/pages-proxy/blob/main/PRIVACY_POLICY.md" target="_blank">Privacy Policy</a>.
+            <br>This is a free, AS-IS service with no SLA or guarantees.
+        </div>
+    </div>
+</body>
+</html>

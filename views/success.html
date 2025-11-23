@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Complete - Pages Proxy</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            max-width: 600px;
+            width: 100%;
+            padding: 32px;
+            text-align: center;
+        }
+        .success-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            color: #3fb950;
+            margin-bottom: 16px;
+            font-size: 24px;
+        }
+        p {
+            color: #8b949e;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        .next-steps {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 24px 0;
+            text-align: left;
+        }
+        .next-steps h2 {
+            color: #58a6ff;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+        .next-steps ol {
+            margin-left: 20px;
+        }
+        .next-steps li {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .code {
+            background: #0d1117;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'SF Mono', Monaco, Consolas, monospace;
+            font-size: 12px;
+            color: #79c0ff;
+        }
+        a.button {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #238636;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            margin-top: 16px;
+        }
+        a.button:hover {
+            background: #2ea043;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">✓</div>
+        <h1>Configuration Saved Successfully</h1>
+        <p>Your Cloudflare credentials have been encrypted and stored securely.</p>
+
+        <div class="next-steps">
+            <h2>What Happens Next?</h2>
+            <ol>
+                <li>Go to any repository with GitHub Pages enabled</li>
+                <li>Add a custom domain in <span class="code">Settings → Pages → Custom domain</span></li>
+                <li>Pages Proxy will automatically create the DNS record in Cloudflare</li>
+                <li>Wait for DNS propagation (usually 1-5 minutes)</li>
+                <li>Your Pages site will be live at your custom domain</li>
+            </ol>
+        </div>
+
+        <p>You can update your credentials anytime by visiting the setup page again.</p>
+        
+        <a href="https://github.com/apps/pages-proxy" class="button">Return to GitHub</a>
+    </div>
+</body>
+</html>

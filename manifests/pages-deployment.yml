@@ -32,7 +32,7 @@ spec:
   resources:
     requests:
       storage: 1Gi
-  storageClassName: thin-csi
+  storageClassName: ceph-rbd-ssd
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -109,7 +109,7 @@ spec:
             memory: 128Mi
             cpu: 100m
       - name: app
-        image: registry.redcloud.land/github-apps/pages-proxy:012
+        image: registry.redcloud.land/github-apps/pages.proxy
         securityContext:
           runAsUser: 1000
           allowPrivilegeEscalation: false

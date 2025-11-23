@@ -8,6 +8,11 @@ GitHub Pages Proxy ("we," "our," or "us") is a GitHub App that connects GitHub P
 
 ## Information We Collect
 
+### Cloudflare API Credentials
+- **Cloudflare Zone ID** - Required to identify the DNS zone for record management
+- **Cloudflare API Token** - Stored encrypted using AES-256-GCM encryption with a master encryption key
+- **Cloudflare Email** (optional) - Only used if legacy Global API Key authentication is required
+
 ### GitHub Repository Data
 - Repository names and metadata
 - GitHub Pages configuration and custom domain settings
@@ -36,10 +41,14 @@ We use the collected information to:
 
 ## Data Storage and Security
 
+- **Cloudflare API Tokens** are encrypted using AES-256-GCM encryption before storage in the database
 - Repository and domain mapping data is stored in a local SQLite database (`pages.db`)
+- Per-installation Cloudflare credentials are stored separately for each GitHub App installation
 - All API communications with GitHub and Cloudflare use secure HTTPS connections
 - Authentication tokens and private keys are handled securely and not logged
 - We implement industry-standard security practices to protect your data
+
+**Security Disclaimer**: While we use industry-standard encryption and security practices, no method of electronic storage is 100% secure. You use the Service at your own risk and should use API tokens with minimum required permissions (DNS Edit only).
 
 ## Data Sharing and Third Parties
 
@@ -53,8 +62,10 @@ We do not sell, trade, or otherwise transfer your information to third parties e
 ## Data Retention
 
 - Repository and domain mapping data is retained as long as the GitHub App is installed
+- Cloudflare API credentials are stored per-installation and deleted when the app is uninstalled
 - When the app is uninstalled or a repository is disconnected, associated DNS records are removed
 - Log data is retained for operational purposes and may be periodically purged
+- You can update or remove your Cloudflare credentials at any time by visiting the setup page again
 
 ## Your Rights and Choices
 

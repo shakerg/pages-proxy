@@ -19,20 +19,23 @@ const cfGlobal = new cloudflare({
   key: process.env.CLOUDFLARE_GLOBAL_API_KEY
 });
 
-async function createCNAMERecord(domain, target) {
+async function createCNAMERecord(domain, target, config = null) {
+  const zoneId = config?.cloudflare_zone_id || CLOUDFLARE_ZONE_ID;
+  const apiToken = config?.cloudflare_api_token || CLOUDFLARE_API_TOKEN;
+  const targetDomain = target || CLOUDFLARE_TARGET_DOMAIN;
 
-  console.log(`Creating CNAME record for domain: ${domain}, target: ${CLOUDFLARE_TARGET_DOMAIN}`);
+  console.log(`Creating CNAME record for domain: ${domain}, target: ${targetDomain}`);
   try {
-    const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${CLOUDFLARE_ZONE_ID}/dns_records`, {
+    const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${zoneId}/dns_records`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`
+        'Authorization': `Bearer ${apiToken}`
       },
       body: JSON.stringify({
         type: 'CNAME',
         name: domain,
-        content: CLOUDFLARE_TARGET_DOMAIN,
+        content: targetDomain,
         ttl: 1,
         proxied: false // NO PROXY! Geez...
       })
@@ -53,14 +56,18 @@ async function createCNAMERecord(domain, target) {
   }
 }
 
-async function deleteARecord(recordId) {
+async function deleteARecord(recordId, config = null) {
+  const zoneId = config?.cloudflare_zone_id || CLOUDFLARE_ZONE_ID;
+  const email = config?.cloudflare_email || CLOUDFLARE_EMAIL;
+  const apiKey = CLOUDFLARE_GLOBAL_API_KEY; // Using global key for deletion
+  
   console.log(`Deleting DNS record with ID: ${recordId}`);
   try {
-    const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${recordId}`, {
+    const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${zoneId}/dns_records/${recordId}`, {
       method: 'DELETE',
       headers: {
-        'X-Auth-Email': CLOUDFLARE_EMAIL,
-        'X-Auth-Key': CLOUDFLARE_GLOBAL_API_KEY
+        'X-Auth-Email': email,
+        'X-Auth-Key': apiKey
       }
     });
     
@@ -80,12 +87,15 @@ async function deleteARecord(recordId) {
   }
 }
 
-async function deleteCNAMERecordByName(domain) {
+async function deleteCNAMERecordByName(domain, config = null) {
+  const zoneId = config?.cloudflare_zone_id || CLOUDFLARE_ZONE_ID;
+  const apiToken = config?.cloudflare_api_token || CLOUDFLARE_API_TOKEN;
+  
   try {
-    const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?type=CNAME&name=${domain}`, {
+    const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${zoneId}/dns_records?type=CNAME&name=${domain}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`
+        'Authorization': `Bearer ${apiToken}`
       }
     });
     
@@ -98,7 +108,7 @@ async function deleteCNAMERecordByName(domain) {
     const record = data.result && data.result.length > 0 ? data.result[0] : null;
     if (record) {
       console.log(`Found CNAME record for ${domain} with ID: ${record.id}, deleting...`);
-      return await deleteARecord(record.id);
+      return await deleteARecord(record.id, config);
     }
     
     console.log(`No CNAME record found for domain: ${domain}`);
@@ -109,21 +119,25 @@ async function deleteCNAMERecordByName(domain) {
   }
 }
 
-async function updateCNAMERecord(zoneId, recordId, newCNAME) {
+async function updateCNAMERecord(zoneId, recordId, newCNAME, config = null) {
+  const email = config?.cloudflare_email || CLOUDFLARE_EMAIL;
+  const apiKey = CLOUDFLARE_GLOBAL_API_KEY;
+  const targetDomain = newCNAME.content || CLOUDFLARE_TARGET_DOMAIN;
+  
   try {
-    console.log(`Updating CNAME record ${recordId} with name: ${newCNAME.name}, content: ${CLOUDFLARE_TARGET_DOMAIN}`);
+    console.log(`Updating CNAME record ${recordId} with name: ${newCNAME.name}, content: ${targetDomain}`);
     
     const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${zoneId}/dns_records/${recordId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'X-Auth-Email': CLOUDFLARE_EMAIL,
-        'X-Auth-Key': CLOUDFLARE_GLOBAL_API_KEY
+        'X-Auth-Email': email,
+        'X-Auth-Key': apiKey
       },
       body: JSON.stringify({
         type: 'CNAME',
         name: newCNAME.name,
-        content: CLOUDFLARE_TARGET_DOMAIN,
+        content: targetDomain,
         ttl: 1,
         proxied: false
       })
@@ -143,13 +157,17 @@ async function updateCNAMERecord(zoneId, recordId, newCNAME) {
   }
 }
 
-async function updateOrCreateCNAMERecord(domain, target) {
+async function updateOrCreateCNAMERecord(domain, target, config = null) {
+  const zoneId = config?.cloudflare_zone_id || CLOUDFLARE_ZONE_ID;
+  const apiToken = config?.cloudflare_api_token || CLOUDFLARE_API_TOKEN;
+  const targetDomain = target || CLOUDFLARE_TARGET_DOMAIN;
+  
   try {
-    console.log(`Updating or creating CNAME record for ${domain} pointing to ${CLOUDFLARE_TARGET_DOMAIN}`);
-    const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${CLOUDFLARE_ZONE_ID}/dns_records?type=CNAME&name=${domain}`, {
+    console.log(`Updating or creating CNAME record for ${domain} pointing to ${targetDomain}`);
+    const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${zoneId}/dns_records?type=CNAME&name=${domain}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${CLOUDFLARE_API_TOKEN}`
+        'Authorization': `Bearer ${apiToken}`
       }
     });
     
@@ -157,24 +175,24 @@ async function updateOrCreateCNAMERecord(domain, target) {
     
     if (!data.success) {
       console.error(`Failed to search for existing CNAME: ${data.errors ? data.errors.map(e => e.message).join(', ') : 'Unknown error'}`);
-      return await createCNAMERecord(domain, CLOUDFLARE_TARGET_DOMAIN);
+      return await createCNAMERecord(domain, targetDomain, config);
     }
     
     const existingRecord = data.result && data.result.length > 0 ? data.result[0] : null;
     
     if (existingRecord) {
       console.log(`Found existing CNAME record for ${domain}, updating...`);
-      return await updateCNAMERecord(CLOUDFLARE_ZONE_ID, existingRecord.id, { 
+      return await updateCNAMERecord(zoneId, existingRecord.id, { 
         name: domain, 
-        content: CLOUDFLARE_TARGET_DOMAIN 
-      });
+        content: targetDomain 
+      }, config);
     } else {
       console.log(`No existing CNAME record for ${domain}, creating new record...`);
-      return await createCNAMERecord(domain, CLOUDFLARE_TARGET_DOMAIN);
+      return await createCNAMERecord(domain, targetDomain, config);
     }
   } catch (error) {
     console.error('Error in updateOrCreateCNAMERecord:', error.message);
-    return { id: `mock-id-${Date.now()}`, name: domain, content: CLOUDFLARE_TARGET_DOMAIN };
+    return { id: `mock-id-${Date.now()}`, name: domain, content: targetDomain };
   }
 }
 

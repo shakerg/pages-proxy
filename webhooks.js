@@ -3,10 +3,35 @@ let fetch;
   const module = await import('node-fetch');
   fetch = module.default;
 })();
+const crypto = require('crypto');
 const db = require('./database');
 const cloudflare = require('./cloudflare');
 const { checkAndRefreshToken } = require('./utils/tokenManager');
 const logger = require('./utils/logger');
+
+function verifyWebhookSignature(payload, signature, secret) {
+  if (!signature) {
+    return false;
+  }
+
+  const hmac = crypto.createHmac('sha256', secret);
+  const digest = 'sha256=' + hmac.update(payload).digest('hex');
+  
+  // Check lengths match before using timingSafeEqual
+  if (signature.length !== digest.length) {
+    return false;
+  }
+  
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(digest)
+    );
+  } catch (error) {
+    logger.error('Error verifying webhook signature:', error);
+    return false;
+  }
+}
 
 async function getOctokit() {
   const { Octokit } = await import('@octokit/rest');
@@ -23,9 +48,25 @@ async function ensureFetch() {
 
 async function handleWebhook(req, res) {
   const event = req.headers['x-github-event'];
+  const signature = req.headers['x-hub-signature-256'];
   const payload = req.body;
 
   console.log(`Received GitHub webhook event: ${event}`);
+
+  // Verify webhook signature to prevent spoofing
+  const secret = process.env.GITHUB_WEBHOOK_SECRET;
+  if (!secret) {
+    logger.error('GITHUB_WEBHOOK_SECRET is not configured');
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
+
+  const rawBody = req.rawBody || JSON.stringify(payload);
+  if (!verifyWebhookSignature(rawBody, signature, secret)) {
+    logger.error('Webhook signature verification failed');
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  console.log('Webhook signature verified successfully');
 
   try {
     await checkAndRefreshToken();
@@ -52,8 +93,22 @@ async function handleWebhook(req, res) {
 }
 
 async function handleRepositoryEvent(payload) {
-  const { action, repository } = payload;
+  const { action, repository, installation } = payload;
   const repoName = repository.full_name;
+  const installationId = installation?.id;
+  
+  if (!installationId) {
+    console.error('No installation ID found in payload');
+    return;
+  }
+  
+  // Get installation-specific Cloudflare credentials
+  const config = await db.getInstallationConfig(installationId);
+  if (!config) {
+    console.error(`No Cloudflare configuration found for installation ${installationId}`);
+    console.log('User needs to complete setup at /setup?installation_id=' + installationId);
+    return;
+  }
   
   if (action === 'created' || action === 'updated') {
     const pagesUrl = await fetchPagesUrl(repoName);
@@ -62,14 +117,14 @@ async function handleRepositoryEvent(payload) {
       console.log(`Custom domain for ${repoName}: ${customDomain}`);
       await db.storePagesUrl(repoName, pagesUrl.pagesUrl, customDomain);
       if (customDomain) {
-        await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city');
+        await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city', config);
       }
     }
   } else if (action === 'deleted') {
     const existingRecord = await fetchExistingDatabaseRecord(repoName);
     if (existingRecord && existingRecord.custom_domain) {
       console.log(`Deleting Cloudflare CNAME record for ${existingRecord.custom_domain} due to repository deletion`);
-      await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain);
+      await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain, config);
     }
     
     await db.removePagesUrl(repoName);
@@ -78,20 +133,34 @@ async function handleRepositoryEvent(payload) {
 
 async function handlePagesEvent(payload) {
   console.log('Received pages event:', JSON.stringify(payload, null, 2));
-  const { action, repository } = payload;
+  const { action, repository, installation } = payload;
   const repoName = repository.full_name;
+  const installationId = installation?.id;
+  
+  if (!installationId) {
+    console.error('No installation ID found in payload');
+    return;
+  }
+  
+  // Get installation-specific Cloudflare credentials
+  const config = await db.getInstallationConfig(installationId);
+  if (!config) {
+    console.error(`No Cloudflare configuration found for installation ${installationId}`);
+    console.log('User needs to complete setup at /setup?installation_id=' + installationId);
+    return;
+  }
   
   try {
     const existingRecord = await fetchExistingDatabaseRecord(repoName);
     console.log('Existing record for %s:', repoName, existingRecord);
     
     if (action === 'created' || action === 'updated') {
-      await processCustomDomainChange(payload, existingRecord);
+      await processCustomDomainChange(payload, existingRecord, config);
     } else if (action === 'deleted' || action === 'undeploy') {
       if (existingRecord && existingRecord.custom_domain) {
         console.log(`Pages site deleted/undeployed for ${repoName}. Removing custom domain: ${existingRecord.custom_domain}`);
         
-        await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain);
+        await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain, config);
         await db.storePagesUrl(repoName, existingRecord.pages_url, null);
         
         console.log(`Successfully removed CNAME record for ${existingRecord.custom_domain} from Cloudflare`);
@@ -102,7 +171,7 @@ async function handlePagesEvent(payload) {
   }
 }
 
-async function processCustomDomainChange(payload, existingRecord) {
+async function processCustomDomainChange(payload, existingRecord, config) {
   const { repository, pages } = payload;
   const repoName = repository.full_name;
   const customDomain = pages?.cname || null;
@@ -114,12 +183,12 @@ async function processCustomDomainChange(payload, existingRecord) {
       console.log(`Custom domain changed for ${repoName}. Old: ${existingRecord.custom_domain}, New: ${customDomain}`);
       
       console.log(`Deleting old Cloudflare CNAME record for ${existingRecord.custom_domain}`);
-      await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain);
+      await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain, config);
     }
     
     const pagesUrl = pages?.html_url || (existingRecord ? existingRecord.pages_url : repository.html_url);
     await db.storePagesUrl(repoName, pagesUrl, customDomain);
-    await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city');
+    await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city', config);
     
     console.log(`Updated Cloudflare CNAME record for ${customDomain}`);
   } 
@@ -127,7 +196,7 @@ async function processCustomDomainChange(payload, existingRecord) {
     console.log(`Custom domain removal detected for ${repoName}. Previous domain: ${existingRecord.custom_domain}`);
     console.log(`Deleting Cloudflare CNAME record for ${existingRecord.custom_domain}`);
 
-    await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain);
+    await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain, config);
     const pagesUrl = pages?.html_url || existingRecord.pages_url;
     await db.storePagesUrl(repoName, pagesUrl, null);
     
@@ -137,8 +206,22 @@ async function processCustomDomainChange(payload, existingRecord) {
 
 async function handlePageBuildEvent(payload) {
   console.log('Received page_build event:', JSON.stringify(payload, null, 2));
-  const { repository } = payload;
+  const { repository, installation } = payload;
   const repoName = repository.full_name;
+  const installationId = installation?.id;
+  
+  if (!installationId) {
+    console.error('No installation ID found in payload');
+    return;
+  }
+  
+  // Get installation-specific Cloudflare credentials
+  const config = await db.getInstallationConfig(installationId);
+  if (!config) {
+    console.error(`No Cloudflare configuration found for installation ${installationId}`);
+    console.log('User needs to complete setup at /setup?installation_id=' + installationId);
+    return;
+  }
   
   try {
     const existingRecord = await fetchExistingDatabaseRecord(repoName);
@@ -161,7 +244,7 @@ async function handlePageBuildEvent(payload) {
         (!pagesResult || !pagesResult.cname || pagesResult.cname === '')) {
       console.log(`Custom domain removal detected for ${repoName}. Previous domain: ${existingRecord.custom_domain}`);
       console.log(`Deleting Cloudflare CNAME record for ${existingRecord.custom_domain}`);
-      await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain);
+      await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain, config);
       await db.storePagesUrl(repoName, repository.html_url || existingRecord.pages_url, null);
       
       console.log(`Successfully removed CNAME record for ${existingRecord.custom_domain} from Cloudflare and updated database`);
@@ -177,11 +260,11 @@ async function handlePageBuildEvent(payload) {
         console.log(`Custom domain changed for ${repoName}. Old: ${existingRecord.custom_domain}, New: ${customDomain}`);
         
         console.log(`Deleting old Cloudflare CNAME record for ${existingRecord.custom_domain}`);
-        await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain);
+        await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain, config);
       }
       
       await db.storePagesUrl(repoName, repository.html_url || (existingRecord ? existingRecord.pages_url : null), customDomain);
-      await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city');
+      await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city', config);
       console.log(`Updated/created Cloudflare CNAME record for ${customDomain}`);
       return;
     }
@@ -203,11 +286,11 @@ async function handlePageBuildEvent(payload) {
         console.log(`Custom domain changed for ${repoName}. Old: ${existingRecord.custom_domain}, New: ${customDomain}`);
         
         console.log(`Deleting old Cloudflare CNAME record for ${existingRecord.custom_domain}`);
-        await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain);
+        await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain, config);
       }
       
       await db.storePagesUrl(repoName, repository.html_url || (existingRecord ? existingRecord.pages_url : null), customDomain);
-      await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city');
+      await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city', config);
       console.log(`Updated/created Cloudflare CNAME record for ${customDomain} from CNAME file`);
     } else {
       console.log(`No custom domain found in CNAME file for ${repoName}`);
@@ -216,7 +299,7 @@ async function handlePageBuildEvent(payload) {
         console.log(`Custom domain removal confirmed for ${repoName}. Previous domain: ${existingRecord.custom_domain}`);
         console.log(`Deleting Cloudflare CNAME record for ${existingRecord.custom_domain}`);
 
-        await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain);
+        await cloudflare.deleteCNAMERecordByName(existingRecord.custom_domain, config);
         await db.storePagesUrl(repoName, repository.html_url || existingRecord.pages_url, null);
 
         console.log(`Successfully removed CNAME record for ${existingRecord.custom_domain} from Cloudflare and updated database`);
