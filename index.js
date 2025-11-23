@@ -83,6 +83,15 @@ app.post('/setup/complete', async (req, res) => {
 
 app.post('/webhook', webhooks.handleWebhook);
 
+// Health endpoints for Kubernetes liveness/readiness probes
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+app.head('/health', (req, res) => {
+  res.status(200).end();
+});
+
 app.post('/test-store', async (req, res) => {
   console.log('Invoking testStorePagesUrl with payload:', req.body);
   try {
