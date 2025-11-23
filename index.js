@@ -9,8 +9,15 @@ const cloudflare = require('./cloudflare');
 const database = require('./database');
 require('dotenv').config();
 
-const { generateToken, setupTokenRefresh } = require('./utils/tokenManager');
+// Rate limiter for /webhook endpoint: Allow max 60 requests per minute per IP
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // limit each IP to 60 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the RateLimit-* headers
+  legacyHeaders: false, // Disable the X-RateLimit-* headers
+});
 
+const { generateToken, setupTokenRefresh } = require('./utils/tokenManager');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -234,7 +241,7 @@ app.post('/setup/complete', setupCompleteLimiter, async (req, res) => {
   }
 });
 
-app.post('/webhook', webhooks.handleWebhook);
+app.post('/webhook', webhookLimiter, webhooks.handleWebhook);
 
 // Health endpoints for Kubernetes liveness/readiness probes
 app.get('/health', (req, res) => {
