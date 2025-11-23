@@ -89,6 +89,15 @@ app.post('/setup/test', setupTestLimiter, async (req, res) => {
         error: 'Missing required fields: zone_id or api_token' 
       });
     }
+
+    // Validate zone_id format (UUID)
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+    if (!uuidRegex.test(zone_id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid zone_id format (must be a UUID)'
+      });
+    }
     
     console.log(`Testing Cloudflare credentials for zone ${zone_id}...`);
     
