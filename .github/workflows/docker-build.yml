@@ -7,12 +7,12 @@ on:
       - '**.js'
       - '**.json'
       - 'Dockerfile'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - '**.js'
-      - '**.json'
-      - 'Dockerfile'
+  # pull_request:
+  #   branches: [ main ]
+  #   paths:
+  #     - '**.js'
+  #     - '**.json'
+  #     - 'Dockerfile'
   release:
     types: [ published ]
   workflow_dispatch:
