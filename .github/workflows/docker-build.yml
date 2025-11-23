@@ -58,11 +58,6 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Generate image digest
-      id: digest
-      run: |
-        echo "IMAGE_DIGEST=$(docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --format '{{.Manifest.Digest}}')" >> $GITHUB_OUTPUT
-
     - name: Create deployment artifact
       run: |
         mkdir -p artifacts
@@ -70,7 +65,6 @@ jobs:
         {
           "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}",
           "tags": $(echo '${{ steps.meta.outputs.tags }}' | jq -R 'split("\n") | map(select(length > 0))'),
-          "digest": "${{ steps.digest.outputs.IMAGE_DIGEST }}",
           "build_date": "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)",
           "commit_sha": "${{ github.sha }}",
           "ref": "${{ github.ref }}"
