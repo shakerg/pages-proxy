@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const validator = require('validator');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
@@ -87,6 +88,13 @@ app.post('/setup/test', setupTestLimiter, async (req, res) => {
       return res.status(400).json({ 
         success: false, 
         error: 'Missing required fields: zone_id or api_token' 
+      });
+    }
+    // Validate that zone_id is a valid UUID (Cloudflare zone IDs are UUIDs)
+    if (!validator.isUUID(zone_id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid zone_id format: must be a valid UUID'
       });
     }
     
