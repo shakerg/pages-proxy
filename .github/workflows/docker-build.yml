@@ -86,6 +86,7 @@ jobs:
         
         docker run --rm -p 3000:3000 \
           -e PORT=3000 \
+          -e ENCRYPTION_KEY="$ENCRYPTION_KEY" \
           -e GITHUB_APP_ID="$GITHUB_APP_ID" \
           -e GITHUB_INSTALLATION_ID="$GITHUB_INSTALLATION_ID" \
           -e GITHUB_WEBHOOK_SECRET="$GITHUB_WEBHOOK_SECRET" \
@@ -124,4 +125,29 @@ jobs:
         echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Quick start:**" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# Generate encryption key" >> $GITHUB_STEP_SUMMARY
+        echo "export ENCRYPTION_KEY=\$(openssl rand -base64 48)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Set GitHub App credentials" >> $GITHUB_STEP_SUMMARY
+        echo "export GITHUB_APP_ID=your_app_id" >> $GITHUB_STEP_SUMMARY
+        echo "export GITHUB_INSTALLATION_ID=your_installation_id" >> $GITHUB_STEP_SUMMARY
+        echo "export GITHUB_WEBHOOK_SECRET=your_webhook_secret" >> $GITHUB_STEP_SUMMARY
+        echo "export GITHUB_APP_PRIVATE_KEY='your_private_key'" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Set Cloudflare credentials (optional if using per-installation setup)" >> $GITHUB_STEP_SUMMARY
+        echo "export CLOUDFLARE_ZONE_ID=your_zone_id" >> $GITHUB_STEP_SUMMARY
+        echo "export CLOUDFLARE_API_TOKEN=your_api_token" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Run container" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -d -p 3000:3000 \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -e ENCRYPTION_KEY -e GITHUB_APP_ID -e GITHUB_INSTALLATION_ID \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -e GITHUB_WEBHOOK_SECRET -e GITHUB_APP_PRIVATE_KEY \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -e CLOUDFLARE_ZONE_ID -e CLOUDFLARE_API_TOKEN \\" >> $GITHUB_STEP_SUMMARY
+        echo "  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Deployment artifacts are available for download with container run scripts and metadata.**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📖 **Documentation:** [README.md](https://github.com/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY
