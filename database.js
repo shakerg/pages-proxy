@@ -12,6 +12,7 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
   } else {
     console.log('Connected to pages.db database');
     
+    // Performance and durability settings
     db.exec('PRAGMA journal_mode = WAL;', (pragmaErr) => {
       if (pragmaErr) console.error('Error setting journal mode:', pragmaErr.message);
     });
@@ -19,6 +20,28 @@ const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CR
     db.exec('PRAGMA synchronous = FULL;', (pragmaErr) => {
       if (pragmaErr) console.error('Error setting synchronous mode:', pragmaErr.message);
     });
+    
+    // Security and integrity settings
+    db.exec('PRAGMA foreign_keys = ON;', (pragmaErr) => {
+      if (pragmaErr) {
+        console.error('Error enabling foreign keys:', pragmaErr.message);
+      } else {
+        console.log('Database foreign key constraints enabled');
+      }
+    });
+    
+    // Limit WAL journal size to 64MB to prevent unbounded growth
+    db.exec('PRAGMA journal_size_limit = 67108864;', (pragmaErr) => {
+      if (pragmaErr) {
+        console.error('Error setting journal size limit:', pragmaErr.message);
+      } else {
+        console.log('Database journal size limit set to 64MB');
+      }
+    });
+    
+    // Set busy timeout to 5 seconds (prevents immediate failures under contention)
+    db.configure('busyTimeout', 5000);
+    console.log('Database busy timeout set to 5 seconds');
   }
 });
 
@@ -211,66 +234,7 @@ async function storePagesUrl(repoName, pagesUrl, customDomain) {
           });
         }
 
-        try {
-          if (sanitizedCustomDomain) {
-            const githubDomain = extractGitHubDomain(sanitizedPagesUrl);
-            console.log(`Creating/updating CNAME record for ${sanitizedCustomDomain} pointing to ${githubDomain}`);
-
-            if (row && row.custom_domain && row.custom_domain !== sanitizedCustomDomain) {
-              const oldRecordId = await getCloudflareRecordId(sanitizedRepoName);
-              if (oldRecordId) {
-                console.log(`Custom domain changed from ${row.custom_domain} to ${sanitizedCustomDomain}. Deleting old record ${oldRecordId}`);
-                try {
-                  await cloudflare.deleteARecord(oldRecordId);
-                } catch (deleteErr) {
-                  console.error('Failed to delete old Cloudflare record, but continuing:', deleteErr);
-                }
-              }
-            
-              try {
-                const record = await cloudflare.createCNAMERecord(sanitizedCustomDomain, githubDomain);
-                await storeCloudflareRecordId(sanitizedRepoName, record.id);
-                console.log(`Created new Cloudflare record for ${sanitizedCustomDomain} pointing to ${githubDomain}`);
-              } catch (createErr) {
-                console.error('Failed to create new Cloudflare record, but database was updated:', createErr);
-              }
-            } else {
-              const existingRecordId = await getCloudflareRecordId(sanitizedRepoName);
-              if (existingRecordId) {
-                try {
-                  await cloudflare.updateCNAMERecord(process.env.CLOUDFLARE_ZONE_ID, existingRecordId, { 
-                    name: sanitizedCustomDomain, 
-                    content: githubDomain // Use the GitHub domain, not the full pages URL
-                  });
-                  console.log(`Updated existing Cloudflare record for ${sanitizedCustomDomain} pointing to ${githubDomain}`);
-                } catch (updateErr) {
-                  console.error('Failed to update Cloudflare record, but database was updated:', updateErr);
-                }
-              } else {
-                try {
-                  const record = await cloudflare.createCNAMERecord(sanitizedCustomDomain, githubDomain);
-                  await storeCloudflareRecordId(sanitizedRepoName, record.id);
-                  console.log(`Created new Cloudflare record for ${sanitizedCustomDomain} pointing to ${githubDomain}`);
-                } catch (createErr) {
-                  console.error('Failed to create Cloudflare record, but database was updated:', createErr);
-                }
-              }
-            }
-          } else if (row && row.custom_domain) {
-            const recordId = await getCloudflareRecordId(sanitizedRepoName);
-            if (recordId) {
-              try {
-                await cloudflare.deleteARecord(recordId);
-                console.log(`Deleted Cloudflare record for ${row.custom_domain} because custom domain was removed`);
-              } catch (deleteErr) {
-                console.error('Failed to delete Cloudflare record, but database was updated:', deleteErr);
-              }
-            }
-          }
-        } catch (cloudflareErr) {
-          console.error('Error with Cloudflare operations, but database was updated successfully:', cloudflareErr);
-        }
-
+        // Cloudflare DNS updates are now handled by webhook handlers, not database layer
         resolve();
       } catch (error) {
         console.error('Unexpected error in storePagesUrl:', error);

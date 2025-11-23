@@ -88,6 +88,36 @@
             color: #484f58;
             cursor: not-allowed;
         }
+        .button-test {
+            background: #1f6feb;
+            margin-bottom: 12px;
+        }
+        .button-test:hover {
+            background: #388bfd;
+        }
+        .test-result {
+            margin: 16px 0;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            display: none;
+        }
+        .test-result.success {
+            background: #1a4d2e;
+            border: 1px solid #238636;
+            color: #56d364;
+            display: block;
+        }
+        .test-result.error {
+            background: #4d1a1a;
+            border: 1px solid #da3633;
+            color: #f85149;
+            display: block;
+        }
+        .test-result strong {
+            display: block;
+            margin-bottom: 6px;
+        }
         .warning {
             background: #1f2937;
             border: 1px solid #fbbf24;
@@ -118,6 +148,21 @@
     <div class="container">
         <h1>Configure Pages Proxy</h1>
         <p class="subtitle">Installation ID: <strong>{{INSTALLATION_ID}}</strong></p>
+
+        <div class="warning">
+            <div class="warning-title">📋 Prerequisites</div>
+            <div class="warning-text">
+                <strong>Before proceeding, you must verify your domain with GitHub.</strong>
+                <br><br>
+                1. Go to your GitHub organization settings → Verified domains
+                <br>
+                2. Follow the verification steps to prove domain ownership
+                <br>
+                3. <a href="https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-organization-settings/verifying-or-approving-a-domain-for-your-organization" target="_blank">View GitHub's domain verification guide</a>
+                <br><br>
+                Without domain verification, GitHub Pages custom domains will not work.
+            </div>
+        </div>
 
         <div class="warning">
             <div class="warning-title">⚠️ Important Security Notice</div>
@@ -156,7 +201,10 @@
                 </div>
             </div>
 
-            <button type="submit">Save Configuration</button>
+            <div id="testResult" class="test-result"></div>
+
+            <button type="button" class="button-test" onclick="testCredentials()">Test Credentials</button>
+            <button type="submit" id="submitBtn" disabled>Save Configuration</button>
         </form>
 
         <div class="footer">
@@ -164,5 +212,57 @@
             <br>This is a free, AS-IS service with no SLA or guarantees.
         </div>
     </div>
+
+    <script>
+        async function testCredentials() {
+            const zoneId = document.getElementById('zone_id').value;
+            const apiToken = document.getElementById('api_token').value;
+            const email = document.getElementById('email').value;
+            const resultDiv = document.getElementById('testResult');
+            const submitBtn = document.getElementById('submitBtn');
+            const testBtn = event.target;
+
+            if (!zoneId || !apiToken) {
+                resultDiv.className = 'test-result error';
+                resultDiv.innerHTML = '<strong>❌ Validation Error</strong>Zone ID and API Token are required';
+                submitBtn.disabled = true;
+                return;
+            }
+
+            testBtn.disabled = true;
+            testBtn.textContent = 'Testing...';
+            resultDiv.className = 'test-result';
+            resultDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/setup/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ zone_id: zoneId, api_token: apiToken, email: email })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.className = 'test-result success';
+                    resultDiv.innerHTML = `<strong>✅ Credentials Verified Successfully!</strong>Zone: ${data.zone_name}<br>Token Status: ${data.token_status}<br><br>You can now save the configuration.`;
+                    submitBtn.disabled = false;
+                } else {
+                    resultDiv.className = 'test-result error';
+                    resultDiv.innerHTML = `<strong>❌ Test Failed</strong>${data.error}<br><br>Details: ${typeof data.details === 'object' ? JSON.stringify(data.details) : data.details}`;
+                    submitBtn.disabled = true;
+                }
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.innerHTML = `<strong>❌ Connection Error</strong>Failed to test credentials: ${error.message}`;
+                submitBtn.disabled = true;
+            } finally {
+                testBtn.disabled = false;
+                testBtn.textContent = 'Test Credentials';
+            }
+        }
+    </script>
 </body>
 </html>

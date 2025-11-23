@@ -3,7 +3,9 @@
  */
 
 /**
- * Sanitizes string inputs to prevent SQL injection
+ * Sanitizes string inputs for database storage
+ * Note: SQL injection is prevented by parameterized queries (prepared statements).
+ * This function only validates input format and length.
  * @param {string} input - The input string to sanitize
  * @returns {string} The sanitized string
  */
@@ -16,12 +18,14 @@ function sanitizeString(input) {
     input = String(input);
   }
   
-  // Remove any SQL injection attempts - thanks Copilot!
-  return input
-    .replace(/'/g, "''") // Escape single quotes
-    .replace(/--/g, "")  // Remove SQL comments
-    .replace(/;/g, "")   // Remove semicolons
-    .trim();
+  // Trim whitespace and enforce max length to prevent DOS
+  const sanitized = input.trim();
+  
+  if (sanitized.length > 2048) {
+    throw new Error('Input exceeds maximum allowed length (2048 characters)');
+  }
+  
+  return sanitized;
 }
 
 /**

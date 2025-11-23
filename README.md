@@ -12,6 +12,86 @@ A GitHub Marketplace app that automatically syncs GitHub Pages custom domains wi
 
 ---
 
+## How It Works: DNS & SSL Workflow
+
+### Prerequisites
+
+**Before using Pages Proxy, you must verify your domain with GitHub:**
+
+1. Go to your GitHub organization settings → **Verified domains**
+2. Add your domain (e.g., `example.com`) and follow the verification steps
+3. GitHub will provide a TXT record to add to your DNS
+4. Once verified, you can use any subdomain (e.g., `docs.example.com`, `blog.example.com`) for GitHub Pages
+
+📖 [GitHub's Domain Verification Guide](https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-organization-settings/verifying-or-approving-a-domain-for-your-organization)
+
+### Automatic DNS Configuration
+
+When you configure a custom domain in GitHub Pages, Pages Proxy automatically:
+
+1. **Receives webhook** - GitHub sends `page_build` or `pages` event
+2. **Fetches custom domain** - Reads the CNAME from your repository or Pages API
+3. **Derives origin hostname** - Uses `<org>.github.io` as the DNS target (e.g., `my-org.github.io`)
+4. **Creates CNAME record** - Adds DNS record in Cloudflare with these settings:
+   - **Name**: Your custom domain (e.g., `docs.example.com`)
+   - **Target**: `<org>.github.io` (e.g., `my-org.github.io`)
+   - **Proxied**: `false` (DNS-only mode)
+   - **TTL**: `60` seconds (1 minute for fast propagation)
+
+### SSL Certificate Provisioning
+
+**Why DNS-only mode?** GitHub Pages uses Let's Encrypt to automatically provision SSL certificates. This requires GitHub to verify domain ownership using the ACME HTTP-01 challenge. If Cloudflare proxy is enabled, the challenge fails because Cloudflare intercepts the request.
+
+**Default workflow:**
+1. Pages Proxy creates CNAME in **DNS-only mode** (`proxied: false`)
+2. GitHub Pages detects the DNS record and initiates Let's Encrypt verification
+3. After 5-15 minutes, GitHub provisions the SSL certificate
+4. "Enforce HTTPS" checkbox becomes available in GitHub Pages settings
+
+### Optional: Enable Cloudflare Proxy
+
+After GitHub's SSL certificate is active, you can optionally enable Cloudflare proxy for:
+- Edge caching and performance optimization
+- DDoS protection and WAF
+- IP masking (hides `github.io` origin)
+
+**To enable proxy:**
+
+```bash
+curl -X PATCH "https://api.cloudflare.com/client/v4/zones/<zone_id>/dns_records/<record_id>" \
+  -H "Authorization: Bearer <api_token>" \
+  -H "Content-Type: application/json" \
+  --data '{"proxied":true}'
+```
+
+Find `<record_id>` in Cloudflare dashboard → DNS → Records.
+
+### Important: Updating Custom Domains
+
+**If you change your custom domain in GitHub Pages:**
+
+1. **Disable Cloudflare proxy first** (if enabled) - Change `proxied: true` → `false`
+2. **Update custom domain in GitHub Pages** - This triggers webhook to update DNS
+3. **Wait for new SSL certificate** - GitHub provisions new cert for updated domain (5-15 minutes)
+4. **Re-enable proxy** (optional) - After HTTPS is enforced
+
+⚠️ **Failure to disable proxy before updating** will cause SSL verification to fail, resulting in "Enforce HTTPS — Unavailable for your site" error.
+
+### DNS Propagation
+
+With TTL set to 60 seconds, DNS changes propagate quickly:
+- **Cloudflare edge**: Instant
+- **ISP resolvers**: 1-5 minutes
+- **Global propagation**: 5-15 minutes
+
+You can verify DNS propagation with:
+```bash
+dig docs.example.com CNAME
+# Should show: docs.example.com. 60 IN CNAME my-org.github.io.
+```
+
+---
+
 ## Installation & Setup
 
 You have two options: use the hosted Marketplace app (recommended) or self-host from source.

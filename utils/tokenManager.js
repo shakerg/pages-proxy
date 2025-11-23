@@ -36,33 +36,44 @@ function isRetriableError(error) {
  * - Pages: Write (to read and manage GitHub Pages settings)
  * - Metadata: Read (for basic repository information)
  * 
+ * @param {string|number} installationId - The GitHub App installation ID to generate token for (defaults to env GITHUB_INSTALLATION_ID)
  * @returns {Promise<string>} The installation access token
  */
-async function generateToken() {
+async function generateToken(installationId = null) {
+  const targetInstallationId = installationId || GITHUB_INSTALLATION_ID;
+  
   // Use mutex to prevent multiple simultaneous token generation attempts
   return tokenMutex.withLock(async () => {
     try {
-      logger.info('Generating new GitHub App installation token...');
+      logger.info(`Generating new GitHub App installation token for installation ${targetInstallationId}...`);
       
-      if (tokenCache && tokenCache.expiresAt && new Date(tokenCache.expiresAt) > new Date()) {
+      // Only use cache if it's for the same installation ID and not expired
+      if (tokenCache && 
+          tokenCache.installationId === targetInstallationId && 
+          tokenCache.expiresAt && 
+          new Date(tokenCache.expiresAt) > new Date()) {
         logger.info('Using cached token');
         process.env.GITHUB_APP_TOKEN = tokenCache.token;
         return tokenCache.token;
       }
       
-      const isExpired = await database.isTokenExpired();
-      if (!isExpired) {
-        const tokenData = await database.getStoredToken();
-        if (tokenData && tokenData.token) {
-          logger.info('Using existing valid token from database');
-          process.env.GITHUB_APP_TOKEN = tokenData.token;
-          
-          tokenCache = {
-            token: tokenData.token,
-            expiresAt: tokenData.expires_at
-          };
-          
-          return tokenData.token;
+      // Only check database for default installation (backward compatibility)
+      if (!installationId) {
+        const isExpired = await database.isTokenExpired();
+        if (!isExpired) {
+          const tokenData = await database.getStoredToken();
+          if (tokenData && tokenData.token) {
+            logger.info('Using existing valid token from database');
+            process.env.GITHUB_APP_TOKEN = tokenData.token;
+            
+            tokenCache = {
+              token: tokenData.token,
+              expiresAt: tokenData.expires_at,
+              installationId: targetInstallationId
+            };
+            
+            return tokenData.token;
+          }
         }
       }
       
@@ -76,7 +87,7 @@ async function generateToken() {
           
           const token = jwt.sign(payload, GITHUB_APP_PRIVATE_KEY, { algorithm: 'RS256' });
           
-          const response = await fetch(`https://api.github.com/app/installations/${GITHUB_INSTALLATION_ID}/access_tokens`, {
+          const response = await fetch(`https://api.github.com/app/installations/${targetInstallationId}/access_tokens`, {
             method: 'POST',
             headers: {
               Authorization: `Bearer ${token}`,
@@ -87,22 +98,26 @@ async function generateToken() {
           if (!response.ok) {
             const errorText = await response.text();
             throw Object.assign(
-              new Error(`Failed to fetch installation access token: ${response.statusText}, Details: ${errorText}`),
+              new Error(`Failed to fetch installation access token for ${targetInstallationId}: ${response.statusText}, Details: ${errorText}`),
               { status: response.status }
             );
           }
           
           const data = await response.json();
-          logger.info('Installation Access Token generated successfully, expires:', data.expires_at);
+          logger.info(`Installation Access Token generated successfully for ${targetInstallationId}, expires:`, data.expires_at);
           
-          await database.storeToken({
-            token: data.token,
-            expires_at: data.expires_at
-          });
+          // Only store in database for default installation (backward compatibility)
+          if (!installationId) {
+            await database.storeToken({
+              token: data.token,
+              expires_at: data.expires_at
+            });
+          }
           
           tokenCache = {
             token: data.token,
-            expiresAt: data.expires_at
+            expiresAt: data.expires_at,
+            installationId: targetInstallationId
           };
           
           process.env.GITHUB_APP_TOKEN = data.token;
@@ -116,17 +131,20 @@ async function generateToken() {
         }
       );
     } catch (error) {
-      logger.error('Error generating token:', error.message);
+      logger.error(`Error generating token for installation ${targetInstallationId}:`, error.message);
       
-      try {
-        const tokenData = await database.getStoredToken();
-        if (tokenData && tokenData.token) {
-          logger.info('Falling back to existing token from database');
-          process.env.GITHUB_APP_TOKEN = tokenData.token;
-          return tokenData.token;
+      // Only try database fallback for default installation
+      if (!installationId) {
+        try {
+          const tokenData = await database.getStoredToken();
+          if (tokenData && tokenData.token) {
+            logger.info('Falling back to existing token from database');
+            process.env.GITHUB_APP_TOKEN = tokenData.token;
+            return tokenData.token;
+          }
+        } catch (dbError) {
+          logger.error('Error retrieving token from database:', dbError);
         }
-      } catch (dbError) {
-        logger.error('Error retrieving token from database:', dbError);
       }
       
       return process.env.GITHUB_APP_TOKEN;

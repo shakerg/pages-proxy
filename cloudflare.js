@@ -30,8 +30,8 @@ async function createCNAMERecord(domain, target, config = null) {
         type: 'CNAME',
         name: domain,
         content: targetDomain,
-        ttl: 1,
-        proxied: false // NO PROXY! Geez...
+        ttl: 60, // 1 minute for quick propagation
+        proxied: false // Allow GitHub Pages to verify domain and provision SSL
       })
     });
     
@@ -128,8 +128,8 @@ async function updateCNAMERecord(zoneId, recordId, newCNAME, config = null) {
         type: 'CNAME',
         name: newCNAME.name,
         content: targetDomain,
-        ttl: 1,
-        proxied: false
+        ttl: 60, // 1 minute for quick propagation
+        proxied: false // Allow GitHub Pages to verify domain and provision SSL
       })
     });
     

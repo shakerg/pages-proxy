@@ -33,9 +33,16 @@ function verifyWebhookSignature(payload, signature, secret) {
   }
 }
 
-async function getOctokit() {
+async function getOctokit(installationId = null) {
   const { Octokit } = await import('@octokit/rest');
-  return new Octokit({ auth: process.env.GITHUB_APP_TOKEN });
+  const { generateToken } = require('./utils/tokenManager');
+  
+  // Generate token for specific installation if provided
+  const token = installationId 
+    ? await generateToken(installationId)
+    : process.env.GITHUB_APP_TOKEN;
+  
+  return new Octokit({ auth: token });
 }
 
 async function ensureFetch() {
@@ -44,6 +51,14 @@ async function ensureFetch() {
     fetch = module.default;
   }
   return fetch;
+}
+
+function resolveOriginHostname(repository) {
+  const ownerLogin = repository?.owner?.login;
+  if (!ownerLogin) {
+    throw new Error('Unable to resolve origin hostname: repository owner missing');
+  }
+  return `${ownerLogin.toLowerCase()}.github.io`;
 }
 
 async function handleWebhook(req, res) {
@@ -96,6 +111,7 @@ async function handleRepositoryEvent(payload) {
   const { action, repository, installation } = payload;
   const repoName = repository.full_name;
   const installationId = installation?.id;
+  const originHostname = resolveOriginHostname(repository);
   
   if (!installationId) {
     console.error('No installation ID found in payload');
@@ -117,7 +133,7 @@ async function handleRepositoryEvent(payload) {
       console.log(`Custom domain for ${repoName}: ${customDomain}`);
       await db.storePagesUrl(repoName, pagesUrl.pagesUrl, customDomain);
       if (customDomain) {
-        await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city', config);
+        await cloudflare.updateOrCreateCNAMERecord(customDomain, originHostname, config);
       }
     }
   } else if (action === 'deleted') {
@@ -136,6 +152,7 @@ async function handlePagesEvent(payload) {
   const { action, repository, installation } = payload;
   const repoName = repository.full_name;
   const installationId = installation?.id;
+  const originHostname = resolveOriginHostname(repository);
   
   if (!installationId) {
     console.error('No installation ID found in payload');
@@ -155,7 +172,7 @@ async function handlePagesEvent(payload) {
     console.log('Existing record for %s:', repoName, existingRecord);
     
     if (action === 'created' || action === 'updated') {
-      await processCustomDomainChange(payload, existingRecord, config);
+      await processCustomDomainChange(payload, existingRecord, config, originHostname);
     } else if (action === 'deleted' || action === 'undeploy') {
       if (existingRecord && existingRecord.custom_domain) {
         console.log(`Pages site deleted/undeployed for ${repoName}. Removing custom domain: ${existingRecord.custom_domain}`);
@@ -171,7 +188,7 @@ async function handlePagesEvent(payload) {
   }
 }
 
-async function processCustomDomainChange(payload, existingRecord, config) {
+async function processCustomDomainChange(payload, existingRecord, config, originHostname) {
   const { repository, pages } = payload;
   const repoName = repository.full_name;
   const customDomain = pages?.cname || null;
@@ -188,7 +205,7 @@ async function processCustomDomainChange(payload, existingRecord, config) {
     
     const pagesUrl = pages?.html_url || (existingRecord ? existingRecord.pages_url : repository.html_url);
     await db.storePagesUrl(repoName, pagesUrl, customDomain);
-    await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city', config);
+    await cloudflare.updateOrCreateCNAMERecord(customDomain, originHostname, config);
     
     console.log(`Updated Cloudflare CNAME record for ${customDomain}`);
   } 
@@ -209,6 +226,7 @@ async function handlePageBuildEvent(payload) {
   const { repository, installation } = payload;
   const repoName = repository.full_name;
   const installationId = installation?.id;
+  const originHostname = resolveOriginHostname(repository);
   
   if (!installationId) {
     console.error('No installation ID found in payload');
@@ -229,7 +247,7 @@ async function handlePageBuildEvent(payload) {
     console.log(`Fetching current CNAME for ${repoName} from GitHub Pages API...`);
     let pagesResult;
     try {
-      pagesResult = await fetchPagesCname(repoName);
+      pagesResult = await fetchPagesCname(repoName, installationId);
       console.log('Current Pages API result for %s:', repoName, pagesResult);
     } catch (error) {
       if (error.status === 404) {
@@ -264,7 +282,7 @@ async function handlePageBuildEvent(payload) {
       }
       
       await db.storePagesUrl(repoName, repository.html_url || (existingRecord ? existingRecord.pages_url : null), customDomain);
-      await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city', config);
+      await cloudflare.updateOrCreateCNAMERecord(customDomain, originHostname, config);
       console.log(`Updated/created Cloudflare CNAME record for ${customDomain}`);
       return;
     }
@@ -272,7 +290,7 @@ async function handlePageBuildEvent(payload) {
     console.log(`No custom domain found via Pages API for ${repoName}, checking CNAME file...`);
     let cnameContent;
     try {
-      cnameContent = await fetchCnameFile(repoName);
+      cnameContent = await fetchCnameFile(repoName, installationId);
     } catch (error) {
       console.log(`Error fetching CNAME file: ${error.message}`);
       cnameContent = null;
@@ -290,7 +308,7 @@ async function handlePageBuildEvent(payload) {
       }
       
       await db.storePagesUrl(repoName, repository.html_url || (existingRecord ? existingRecord.pages_url : null), customDomain);
-      await cloudflare.updateOrCreateCNAMERecord(customDomain, 'foundation.redcloud.city', config);
+      await cloudflare.updateOrCreateCNAMERecord(customDomain, originHostname, config);
       console.log(`Updated/created Cloudflare CNAME record for ${customDomain} from CNAME file`);
     } else {
       console.log(`No custom domain found in CNAME file for ${repoName}`);
@@ -312,9 +330,9 @@ async function handlePageBuildEvent(payload) {
   }
 }
 
-async function fetchPagesUrl(repoName) {
+async function fetchPagesUrl(repoName, installationId) {
   try {
-    const octokit = await getOctokit();
+    const octokit = await getOctokit(installationId);
     const { data } = await octokit.repos.getPages({
       owner: repoName.split('/')[0],
       repo: repoName.split('/')[1],
@@ -332,8 +350,8 @@ async function fetchPagesUrl(repoName) {
   }
 }
 
-async function fetchPagesCname(repoName) {
-  const octokit = await getOctokit();
+async function fetchPagesCname(repoName, installationId) {
+  const octokit = await getOctokit(installationId);
   const [owner, repo] = repoName.split('/');
   console.log(`Fetching Pages CNAME for repository: ${owner}/${repo}`);
   
@@ -346,13 +364,13 @@ async function fetchPagesCname(repoName) {
   return { cname: data.cname, source: data.source };
 }
 
-async function fetchCnameFile(repoName) {
+async function fetchCnameFile(repoName, installationId) {
   const [owner, repo] = repoName.split('/');
   console.log(`Attempting to fetch CNAME file from repository: ${owner}/${repo}`);
   
   // Try common branch names
   const branches = ['main', 'master', 'gh-pages'];
-  const octokit = await getOctokit();
+  const octokit = await getOctokit(installationId);
   
   for (const branch of branches) {
     try {

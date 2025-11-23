@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
 const webhooks = require('./webhooks');
@@ -30,8 +31,33 @@ app.use('/webhook', bodyParser.json({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Rate limiting for setup endpoints to prevent brute-force attacks
+const setupPageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 requests per window (page loads)
+  message: 'Too many setup page requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const setupTestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 credential test attempts per window
+  message: 'Too many credential test attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const setupCompleteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // 3 configuration saves per window
+  message: 'Too many configuration save attempts, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Setup UI endpoints
-app.get('/setup', async (req, res) => {
+app.get('/setup', setupPageLimiter, async (req, res) => {
   try {
     const installationId = req.query.installation_id;
     
@@ -53,7 +79,103 @@ app.get('/setup', async (req, res) => {
   }
 });
 
-app.post('/setup/complete', async (req, res) => {
+app.post('/setup/test', setupTestLimiter, async (req, res) => {
+  try {
+    const { zone_id, api_token, email } = req.body;
+    
+    if (!zone_id || !api_token) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required fields: zone_id or api_token' 
+      });
+    }
+    
+    console.log(`Testing Cloudflare credentials for zone ${zone_id}...`);
+    
+    // Test 1: Verify the API token is valid
+    const verifyResponse = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${api_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!verifyResponse.ok) {
+      const errorData = await verifyResponse.json();
+      console.error('Token verification failed:', errorData);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid API token',
+        details: errorData.errors || 'Token verification failed'
+      });
+    }
+    
+    const verifyData = await verifyResponse.json();
+    console.log('Token verified:', verifyData.result.status);
+    
+    // Test 2: Verify the zone exists and is accessible
+    const zoneResponse = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone_id}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${api_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!zoneResponse.ok) {
+      const errorData = await zoneResponse.json();
+      console.error('Zone access failed:', errorData);
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot access zone',
+        details: errorData.errors || 'Zone not found or insufficient permissions'
+      });
+    }
+    
+    const zoneData = await zoneResponse.json();
+    const zoneName = zoneData.result.name;
+    console.log(`Zone verified: ${zoneName}`);
+    
+    // Test 3: Verify DNS permissions by listing DNS records (read permission)
+    const dnsResponse = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?per_page=1`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${api_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!dnsResponse.ok) {
+      const errorData = await dnsResponse.json();
+      console.error('DNS read permission check failed:', errorData);
+      return res.status(400).json({
+        success: false,
+        error: 'Insufficient DNS permissions',
+        details: 'Token does not have DNS read/write permissions for this zone'
+      });
+    }
+    
+    console.log('✅ All credential tests passed');
+    
+    res.json({
+      success: true,
+      message: 'Credentials verified successfully',
+      zone_name: zoneName,
+      token_status: verifyData.result.status
+    });
+    
+  } catch (error) {
+    console.error('Error testing credentials:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Test failed',
+      details: error.message
+    });
+  }
+});
+
+app.post('/setup/complete', setupCompleteLimiter, async (req, res) => {
   try {
     const { installation_id, zone_id, api_token, email } = req.body;
     

@@ -5,22 +5,25 @@ const IV_LENGTH = 16;
 const SALT_LENGTH = 64;
 const TAG_LENGTH = 16;
 const KEY_LENGTH = 32;
-const ITERATIONS = 100000;
+const ITERATIONS_LEGACY = 100000; // Legacy iteration count (backward compatibility)
+const ITERATIONS_CURRENT = 310000; // OWASP 2023 recommendation for PBKDF2-SHA256
+const CURRENT_VERSION = 'v2'; // Version identifier for encrypted data format
 
 /**
  * Derives an encryption key from the master password using PBKDF2
  * @param {string} password - Master password from environment
  * @param {Buffer} salt - Salt for key derivation
+ * @param {number} iterations - Number of PBKDF2 iterations
  * @returns {Buffer} Derived encryption key
  */
-function deriveKey(password, salt) {
-  return crypto.pbkdf2Sync(password, salt, ITERATIONS, KEY_LENGTH, 'sha256');
+function deriveKey(password, salt, iterations) {
+  return crypto.pbkdf2Sync(password, salt, iterations, KEY_LENGTH, 'sha256');
 }
 
 /**
  * Encrypts a plaintext string using AES-256-GCM
  * @param {string} plaintext - Data to encrypt
- * @returns {string} Base64-encoded encrypted data with format: salt:iv:tag:ciphertext
+ * @returns {string} Base64-encoded encrypted data with format: v2:salt:iv:tag:ciphertext (v2 uses 310k iterations)
  */
 function encrypt(plaintext) {
   if (!plaintext) {
@@ -40,8 +43,8 @@ function encrypt(plaintext) {
   const salt = crypto.randomBytes(SALT_LENGTH);
   const iv = crypto.randomBytes(IV_LENGTH);
 
-  // Derive key from password and salt
-  const key = deriveKey(encryptionKey, salt);
+  // Derive key from password and salt using current iteration count
+  const key = deriveKey(encryptionKey, salt, ITERATIONS_CURRENT);
 
   // Create cipher
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
@@ -53,8 +56,9 @@ function encrypt(plaintext) {
   // Get authentication tag
   const tag = cipher.getAuthTag();
 
-  // Combine salt:iv:tag:ciphertext
+  // Combine version:salt:iv:tag:ciphertext (v2 format includes version identifier)
   return [
+    CURRENT_VERSION,
     salt.toString('base64'),
     iv.toString('base64'),
     tag.toString('base64'),
@@ -64,7 +68,8 @@ function encrypt(plaintext) {
 
 /**
  * Decrypts an encrypted string using AES-256-GCM
- * @param {string} encryptedData - Base64-encoded encrypted data with format: salt:iv:tag:ciphertext
+ * Supports both legacy (100k iterations, 4 parts) and current (310k iterations, 5 parts with version) formats
+ * @param {string} encryptedData - Base64-encoded encrypted data
  * @returns {string} Decrypted plaintext
  */
 function decrypt(encryptedData) {
@@ -80,19 +85,29 @@ function decrypt(encryptedData) {
   try {
     // Split into components
     const parts = encryptedData.split(':');
-    if (parts.length !== 4) {
+    
+    let saltB64, ivB64, tagB64, ciphertext, iterations;
+    
+    // Detect format: v2 (5 parts) or legacy (4 parts)
+    if (parts.length === 5 && parts[0] === 'v2') {
+      // v2 format: v2:salt:iv:tag:ciphertext (310k iterations)
+      [, saltB64, ivB64, tagB64, ciphertext] = parts;
+      iterations = ITERATIONS_CURRENT;
+    } else if (parts.length === 4) {
+      // Legacy format: salt:iv:tag:ciphertext (100k iterations)
+      [saltB64, ivB64, tagB64, ciphertext] = parts;
+      iterations = ITERATIONS_LEGACY;
+    } else {
       throw new Error('Invalid encrypted data format');
     }
-
-    const [saltB64, ivB64, tagB64, ciphertext] = parts;
 
     // Convert from base64
     const salt = Buffer.from(saltB64, 'base64');
     const iv = Buffer.from(ivB64, 'base64');
     const tag = Buffer.from(tagB64, 'base64');
 
-    // Derive key from password and salt
-    const key = deriveKey(encryptionKey, salt);
+    // Derive key from password and salt using appropriate iteration count
+    const key = deriveKey(encryptionKey, salt, iterations);
 
     // Create decipher
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
@@ -119,7 +134,8 @@ function isEncrypted(value) {
   }
 
   const parts = value.split(':');
-  return parts.length === 4;
+  // v2 format (5 parts) or legacy format (4 parts)
+  return parts.length === 4 || (parts.length === 5 && parts[0] === 'v2');
 }
 
 module.exports = {
