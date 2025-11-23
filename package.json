@@ -20,4 +20,8 @@
     "supertest": "^7.0.0",
     "cloudflare": "^4.1.0"
   }
+  ,
+  "overrides": {
+    "tar-fs": "2.1.4"
+  }
 }
