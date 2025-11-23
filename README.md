@@ -234,9 +234,7 @@ To self-host, you need to create your own GitHub App (not use the Marketplace ap
    - Note the **App ID**
    - Install the app to your org/account and note the **Installation ID** from the URL
 
-### Deployment Options
-
-### Deployment Options
+## Deployment Options
 
 #### Docker
 
@@ -372,9 +370,7 @@ curl -X POST http://localhost:3000/test-remove \
 
 ---
 
-## 🐛 Troubleshooting
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
