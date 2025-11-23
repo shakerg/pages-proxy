@@ -91,19 +91,30 @@ app.post('/setup/test', setupTestLimiter, async (req, res) => {
       });
     }
     
-    // Validate that zone_id is a valid UUID (Cloudflare zone IDs are UUIDs)
-    if (!validator.isUUID(zone_id)) {
+    // SSRF Protection: Validate zone_id is a valid Cloudflare zone ID format
+    // Cloudflare zone IDs are 32-character hexadecimal strings (not UUIDs)
+    if (!/^[a-f0-9]{32}$/i.test(zone_id)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid zone_id format: must be a valid UUID'
-
+        error: 'Invalid zone_id format: must be a 32-character hexadecimal string'
+      });
+    }
+    
+    // Additional SSRF protection: Validate API token format (should be alphanumeric + some special chars)
+    if (!/^[A-Za-z0-9_-]{40,}$/.test(api_token)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid api_token format'
       });
     }
     
     console.log(`Testing Cloudflare credentials for zone ${zone_id}...`);
     
+    // SSRF Protection: Hardcode Cloudflare API base URL to prevent URL manipulation
+    const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
+    
     // Test 1: Verify the API token is valid
-    const verifyResponse = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', {
+    const verifyResponse = await fetch(`${CLOUDFLARE_API_BASE}/user/tokens/verify`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${api_token}`,
@@ -125,7 +136,8 @@ app.post('/setup/test', setupTestLimiter, async (req, res) => {
     console.log('Token verified:', verifyData.result.status);
     
     // Test 2: Verify the zone exists and is accessible
-    const zoneResponse = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone_id}`, {
+    // SSRF Protection: Use template literal with validated zone_id only
+    const zoneResponse = await fetch(`${CLOUDFLARE_API_BASE}/zones/${zone_id}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${api_token}`,
@@ -148,7 +160,8 @@ app.post('/setup/test', setupTestLimiter, async (req, res) => {
     console.log(`Zone verified: ${zoneName}`);
     
     // Test 3: Verify DNS permissions by listing DNS records (read permission)
-    const dnsResponse = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?per_page=1`, {
+    // SSRF Protection: Use base URL constant with validated zone_id
+    const dnsResponse = await fetch(`${CLOUDFLARE_API_BASE}/zones/${zone_id}/dns_records?per_page=1`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${api_token}`,
@@ -193,10 +206,16 @@ app.post('/setup/complete', setupCompleteLimiter, async (req, res) => {
       return res.status(400).send('Missing required fields: installation_id, zone_id, or api_token');
     }
     
-    console.log(`Storing configuration for installation ${installation_id}`);
+    // Format string protection: validate installation_id is numeric before logging
+    const numericInstallationId = parseInt(installation_id);
+    if (isNaN(numericInstallationId)) {
+      return res.status(400).send('Invalid installation_id: must be a number');
+    }
+    
+    console.log(`Storing configuration for installation ${numericInstallationId}`);
     
     await database.storeInstallationConfig(
-      parseInt(installation_id),
+      numericInstallationId,
       zone_id,
       api_token,
       email || null
@@ -209,7 +228,8 @@ app.post('/setup/complete', setupCompleteLimiter, async (req, res) => {
     res.send(html);
   } catch (error) {
     console.error('Error saving configuration:', error);
-    res.status(500).send('Failed to save configuration: ' + error.message);
+    // Don't expose internal error details to user
+    res.status(500).send('Failed to save configuration. Please try again.');
   }
 });
 
@@ -232,7 +252,8 @@ app.post('/test-store', async (req, res) => {
     res.status(200).send('testStorePagesUrl executed successfully - database only, no Cloudflare operations');
   } catch (error) {
     console.error('Error in test-store:', error);
-    res.status(500).send('testStorePagesUrl failed: ' + error.message);
+    // Don't expose internal error details to user
+    res.status(500).send('testStorePagesUrl failed. Check server logs for details.');
   }
 });
 
@@ -244,7 +265,8 @@ app.post('/test-remove', async (req, res) => {
     res.status(200).send('testRemovePagesUrl executed successfully - database only, no Cloudflare operations');
   } catch (error) {
     console.error('Error in test-remove:', error);
-    res.status(500).send('testRemovePagesUrl failed: ' + error.message);
+    // Don't expose internal error details to user
+    res.status(500).send('testRemovePagesUrl failed. Check server logs for details.');
   }
 });
 
@@ -255,11 +277,18 @@ app.post('/update-cname', async (req, res) => {
     
     // If installation_id provided, use per-installation credentials
     if (installation_id) {
-      config = await database.getInstallationConfig(parseInt(installation_id));
-      if (!config) {
-        return res.status(404).send(`No configuration found for installation ${installation_id}`);
+      // Format string protection: validate installation_id is numeric
+      const numericInstallationId = parseInt(installation_id);
+      if (isNaN(numericInstallationId)) {
+        return res.status(400).send('Invalid installation_id: must be a number');
       }
-      console.log(`Using per-installation config for installation ${installation_id}:`, {
+      
+      config = await database.getInstallationConfig(numericInstallationId);
+      if (!config) {
+        // Don't echo user input in error message - use validated numeric value
+        return res.status(404).send(`No configuration found for installation ${numericInstallationId}`);
+      }
+      console.log(`Using per-installation config for installation ${numericInstallationId}:`, {
         has_zone_id: !!config.cloudflare_zone_id,
         has_api_token: !!config.cloudflare_api_token,
         has_email: !!config.cloudflare_email,
@@ -271,7 +300,8 @@ app.post('/update-cname', async (req, res) => {
     res.status(200).send('CNAME record updated successfully');
   } catch (error) {
     console.error('Error updating CNAME record:', error);
-    res.status(500).send('Failed to update CNAME record: ' + error.message);
+    // Don't expose internal error details to user
+    res.status(500).send('Failed to update CNAME record. Check server logs for details.');
   }
 });
 
@@ -284,7 +314,8 @@ app.post('/refresh-token', async (req, res) => {
     });
   } catch (error) {
     console.error('Error refreshing token:', error);
-    res.status(500).send('Failed to refresh token: ' + error.message);
+    // Don't expose internal error details to user
+    res.status(500).send('Failed to refresh token. Check server logs for details.');
   }
 });
 
