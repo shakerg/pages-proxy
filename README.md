@@ -117,10 +117,10 @@ GITHUB_WEBHOOK_SECRET=<webhook_secret>
 GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
 
 # Cloudflare (for self-hosted global config, or leave blank if using per-installation setup)
+# Recommended: use `CLOUDFLARE_API_TOKEN` with minimal DNS edit permissions
 CLOUDFLARE_ZONE_ID=<zone_id>
 CLOUDFLARE_API_TOKEN=<api_token_with_dns_edit_permissions>
 CLOUDFLARE_EMAIL=<account_email>
-CLOUDFLARE_GLOBAL_API_KEY=<global_api_key>
 ```
 
 **Notes**:

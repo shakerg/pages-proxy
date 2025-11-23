@@ -117,13 +117,29 @@ app.post('/test-remove', async (req, res) => {
 });
 
 app.post('/update-cname', async (req, res) => {
-  const { domain, target } = req.body;
+  const { domain, target, installation_id } = req.body;
   try {
-    await cloudflare.updateOrCreateCNAMERecord(domain, target);
+    let config = null;
+    
+    // If installation_id provided, use per-installation credentials
+    if (installation_id) {
+      config = await database.getInstallationConfig(parseInt(installation_id));
+      if (!config) {
+        return res.status(404).send(`No configuration found for installation ${installation_id}`);
+      }
+      console.log(`Using per-installation config for installation ${installation_id}:`, {
+        has_zone_id: !!config.cloudflare_zone_id,
+        has_api_token: !!config.cloudflare_api_token,
+        has_email: !!config.cloudflare_email,
+        zone_id_value: config.cloudflare_zone_id
+      });
+    }
+    
+    await cloudflare.updateOrCreateCNAMERecord(domain, target, config);
     res.status(200).send('CNAME record updated successfully');
   } catch (error) {
     console.error('Error updating CNAME record:', error);
-    res.status(500).send('Failed to update CNAME record');
+    res.status(500).send('Failed to update CNAME record: ' + error.message);
   }
 });
 

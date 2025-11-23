@@ -7,16 +7,10 @@ const CLOUDFLARE_API_URL = 'https://api.cloudflare.com/client/v4';
 const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const CLOUDFLARE_EMAIL = process.env.CLOUDFLARE_EMAIL;
-const CLOUDFLARE_GLOBAL_API_KEY = process.env.CLOUDFLARE_GLOBAL_API_KEY;
 const CLOUDFLARE_TARGET_DOMAIN = process.env.CLOUDFLARE_TARGET_DOMAIN;
 
 const cf = new cloudflare({
   token: process.env.CLOUDFLARE_API_TOKEN
-});
-
-const cfGlobal = new cloudflare({
-  email: process.env.CLOUDFLARE_EMAIL,
-  key: process.env.CLOUDFLARE_GLOBAL_API_KEY
 });
 
 async function createCNAMERecord(domain, target, config = null) {
@@ -58,16 +52,14 @@ async function createCNAMERecord(domain, target, config = null) {
 
 async function deleteARecord(recordId, config = null) {
   const zoneId = config?.cloudflare_zone_id || CLOUDFLARE_ZONE_ID;
-  const email = config?.cloudflare_email || CLOUDFLARE_EMAIL;
-  const apiKey = CLOUDFLARE_GLOBAL_API_KEY; // Using global key for deletion
+  const apiToken = config?.cloudflare_api_token || CLOUDFLARE_API_TOKEN;
   
   console.log(`Deleting DNS record with ID: ${recordId}`);
   try {
     const response = await fetch(`${CLOUDFLARE_API_URL}/zones/${zoneId}/dns_records/${recordId}`, {
       method: 'DELETE',
       headers: {
-        'X-Auth-Email': email,
-        'X-Auth-Key': apiKey
+        'Authorization': `Bearer ${apiToken}`
       }
     });
     
@@ -120,8 +112,7 @@ async function deleteCNAMERecordByName(domain, config = null) {
 }
 
 async function updateCNAMERecord(zoneId, recordId, newCNAME, config = null) {
-  const email = config?.cloudflare_email || CLOUDFLARE_EMAIL;
-  const apiKey = CLOUDFLARE_GLOBAL_API_KEY;
+  const apiToken = config?.cloudflare_api_token || CLOUDFLARE_API_TOKEN;
   const targetDomain = newCNAME.content || CLOUDFLARE_TARGET_DOMAIN;
   
   try {
@@ -131,8 +122,7 @@ async function updateCNAMERecord(zoneId, recordId, newCNAME, config = null) {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'X-Auth-Email': email,
-        'X-Auth-Key': apiKey
+        'Authorization': `Bearer ${apiToken}`
       },
       body: JSON.stringify({
         type: 'CNAME',
