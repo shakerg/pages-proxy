@@ -4,6 +4,7 @@ pages.db*
 node_modules
 test*
 ProjectPlan
+SCALING_PLAN.md
 pages-proxy-env-secret*
 admin-installations.js
 check-key-format.js
