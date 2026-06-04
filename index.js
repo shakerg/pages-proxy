@@ -376,6 +376,14 @@ app.post('/setup/complete', setupCompleteLimiter, async (req, res) => {
 
 app.post('/webhook', webhookLimiter, webhooks.handleWebhook);
 
+const adminDashboardLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many dashboard requests, please try again later.'
+});
+
 app.get('/admin/installations', requireAdminAccess, async (req, res) => {
   try {
     const payload = await buildAdminInstallationsResponse();
@@ -386,7 +394,7 @@ app.get('/admin/installations', requireAdminAccess, async (req, res) => {
   }
 });
 
-app.get('/admin/dashboard', requireAdminAccess, async (req, res) => {
+app.get('/admin/dashboard', requireAdminAccess, adminDashboardLimiter, async (req, res) => {
   try {
     const payload = await buildAdminInstallationsResponse();
     const htmlPath = path.join(__dirname, 'views', 'admin-installations.html');
