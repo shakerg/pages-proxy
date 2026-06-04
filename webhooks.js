@@ -85,7 +85,13 @@ async function handleWebhook(req, res) {
 
   try {
     await checkAndRefreshToken();
-        switch (event) {
+    switch (event) {
+      case 'installation':
+        await handleInstallationEvent(payload);
+        break;
+      case 'installation_repositories':
+        await handleInstallationRepositoriesEvent(payload);
+        break;
       case 'repository':
         await handleRepositoryEvent(payload);
         break;
@@ -107,6 +113,63 @@ async function handleWebhook(req, res) {
   }
 }
 
+async function trackInstallationObservation(installation, repository = null, overrides = {}) {
+  if (!installation?.id) {
+    return null;
+  }
+
+  return db.upsertInstallationRecord({
+    installation_id: installation.id,
+    account_login: installation.account?.login || repository?.owner?.login,
+    account_type: installation.account?.type || repository?.owner?.type,
+    target_type: installation.target_type || repository?.owner?.type,
+    repository_selection: installation.repository_selection,
+    github_created_at: installation.created_at,
+    github_updated_at: installation.updated_at,
+    suspended_at: installation.suspended_at !== undefined ? installation.suspended_at : undefined,
+    last_webhook_at: new Date().toISOString(),
+    ...overrides
+  });
+}
+
+async function handleInstallationEvent(payload) {
+  const { action, installation } = payload;
+
+  if (!installation?.id) {
+    console.error('No installation ID found in installation event payload');
+    return;
+  }
+
+  const overrides = {};
+  if (action === 'deleted') {
+    overrides.deleted_at = new Date().toISOString();
+  }
+
+  if (action === 'suspend') {
+    overrides.suspended_at = new Date().toISOString();
+  }
+
+  if (action === 'unsuspend') {
+    overrides.suspended_at = null;
+    overrides.deleted_at = null;
+  }
+
+  await trackInstallationObservation(installation, null, overrides);
+  console.log(`Tracked installation ${installation.id} lifecycle event: ${action}`);
+}
+
+async function handleInstallationRepositoriesEvent(payload) {
+  const { action, installation } = payload;
+
+  if (!installation?.id) {
+    console.error('No installation ID found in installation_repositories event payload');
+    return;
+  }
+
+  await trackInstallationObservation(installation, null);
+  console.log(`Tracked installation ${installation.id} repository event: ${action}`);
+}
+
 async function handleRepositoryEvent(payload) {
   const { action, repository, installation } = payload;
   const repoName = repository.full_name;
@@ -117,6 +180,8 @@ async function handleRepositoryEvent(payload) {
     console.error('No installation ID found in payload');
     return;
   }
+
+  await trackInstallationObservation(installation, repository);
   
   // Get installation-specific Cloudflare credentials
   const config = await db.getInstallationConfig(installationId);
@@ -158,6 +223,8 @@ async function handlePagesEvent(payload) {
     console.error('No installation ID found in payload');
     return;
   }
+
+  await trackInstallationObservation(installation, repository);
   
   // Get installation-specific Cloudflare credentials
   const config = await db.getInstallationConfig(installationId);
@@ -232,6 +299,8 @@ async function handlePageBuildEvent(payload) {
     console.error('No installation ID found in payload');
     return;
   }
+
+  await trackInstallationObservation(installation, repository);
   
   // Get installation-specific Cloudflare credentials
   const config = await db.getInstallationConfig(installationId);

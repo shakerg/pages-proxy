@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const crypto = require('crypto');
 const validator = require('validator');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
@@ -20,6 +21,129 @@ const webhookLimiter = rateLimit({
 const { generateToken, setupTokenRefresh } = require('./utils/tokenManager');
 const app = express();
 const port = process.env.PORT || 3000;
+
+function getAdminApiKey() {
+  return process.env.ADMIN_API_KEY || '';
+}
+
+function safeEqual(left, right) {
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(left), Buffer.from(right));
+  } catch (error) {
+    return false;
+  }
+}
+
+function requireAdminAccess(req, res, next) {
+  const configuredAdminKey = getAdminApiKey();
+  if (!configuredAdminKey) {
+    return res.status(404).send('Not found');
+  }
+
+  const providedKey = req.get('x-admin-api-key') || req.query.key || '';
+  if (!safeEqual(providedKey, configuredAdminKey)) {
+    return res.status(401).send('Unauthorized');
+  }
+
+  next();
+}
+
+async function buildAdminInstallationsResponse() {
+  const installations = await database.listInstallationRecords();
+  const summary = installations.reduce((accumulator, installation) => {
+    accumulator.total += 1;
+    accumulator.by_config_status[installation.config_status] = (accumulator.by_config_status[installation.config_status] || 0) + 1;
+    accumulator.by_lifecycle_status[installation.lifecycle_status] = (accumulator.by_lifecycle_status[installation.lifecycle_status] || 0) + 1;
+
+    if (installation.config_status !== 'configured' && installation.lifecycle_status === 'active') {
+      accumulator.pending_setup += 1;
+    }
+
+    return accumulator;
+  }, {
+    total: 0,
+    pending_setup: 0,
+    by_config_status: {},
+    by_lifecycle_status: {}
+  });
+
+  return {
+    generated_at: new Date().toISOString(),
+    summary,
+    installations: installations.map((installation) => ({
+      ...installation,
+      has_configuration: installation.config_status === 'configured',
+      setup_url: `/setup?installation_id=${installation.installation_id}`
+    }))
+  };
+}
+
+function formatTimestamp(value) {
+  if (!value) {
+    return '&mdash;';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return validator.escape(String(value));
+  }
+
+  return validator.escape(date.toLocaleString());
+}
+
+function renderSummaryCards(summary) {
+  const cards = [
+    ['Tracked installations', String(summary.total)],
+    ['Pending setup', String(summary.pending_setup)],
+    ['Configured', String(summary.by_config_status.configured || 0)],
+    ['Setup viewed', String(summary.by_config_status.setup_viewed || 0)],
+    ['Pending', String(summary.by_config_status.pending || 0)],
+    ['Active', String(summary.by_lifecycle_status.active || 0)],
+    ['Suspended', String(summary.by_lifecycle_status.suspended || 0)],
+    ['Deleted', String(summary.by_lifecycle_status.deleted || 0)]
+  ];
+
+  return cards.map(([label, value]) => `
+    <article class="summary-card">
+      <span class="summary-label">${validator.escape(label)}</span>
+      <strong class="summary-value">${validator.escape(value)}</strong>
+    </article>
+  `).join('');
+}
+
+function renderInstallationRows(installations) {
+  if (installations.length === 0) {
+    return '<tr><td colspan="10">No installation records tracked yet.</td></tr>';
+  }
+
+  return installations.map((installation) => {
+    const account = installation.account_login ? validator.escape(installation.account_login) : '&mdash;';
+    const accountType = installation.account_type ? validator.escape(installation.account_type) : '&mdash;';
+    const lifecycleStatus = validator.escape(installation.lifecycle_status || 'unknown');
+    const configStatus = validator.escape(installation.config_status || 'unknown');
+    const repositorySelection = installation.repository_selection ? validator.escape(installation.repository_selection) : '&mdash;';
+    const setupLink = `<a href="${validator.escape(installation.setup_url)}">setup</a>`;
+
+    return `
+      <tr>
+        <td>${validator.escape(String(installation.installation_id))}</td>
+        <td>${account}</td>
+        <td>${accountType}</td>
+        <td>${lifecycleStatus}</td>
+        <td>${configStatus}</td>
+        <td>${repositorySelection}</td>
+        <td>${formatTimestamp(installation.setup_completed_at)}</td>
+        <td>${formatTimestamp(installation.last_setup_viewed_at)}</td>
+        <td>${formatTimestamp(installation.last_webhook_at)}</td>
+        <td>${setupLink}</td>
+      </tr>
+    `;
+  }).join('');
+}
 
 if (!fs.existsSync(path.join(__dirname, 'utils'))) {
   fs.mkdirSync(path.join(__dirname, 'utils'));
@@ -76,6 +200,15 @@ app.get('/setup', setupPageLimiter, async (req, res) => {
     
     const htmlPath = path.join(__dirname, 'views', 'setup.html');
     let html = fs.readFileSync(htmlPath, 'utf8');
+
+    try {
+      await database.upsertInstallationRecord({
+        installation_id: parseInt(installationId, 10),
+        last_setup_viewed_at: new Date().toISOString()
+      });
+    } catch (trackingError) {
+      console.error('Error tracking setup page view:', trackingError);
+    }
     
     // Replace template variables (safe: validated as numeric above)
     html = html.replace(/{{INSTALLATION_ID}}/g, installationId);
@@ -242,6 +375,39 @@ app.post('/setup/complete', setupCompleteLimiter, async (req, res) => {
 });
 
 app.post('/webhook', webhookLimiter, webhooks.handleWebhook);
+
+app.get('/admin/installations', requireAdminAccess, async (req, res) => {
+  try {
+    const payload = await buildAdminInstallationsResponse();
+    res.json(payload);
+  } catch (error) {
+    console.error('Error loading admin installations:', error);
+    res.status(500).json({ error: 'Failed to load installation state' });
+  }
+});
+
+app.get('/admin/dashboard', requireAdminAccess, async (req, res) => {
+  try {
+    const payload = await buildAdminInstallationsResponse();
+    const htmlPath = path.join(__dirname, 'views', 'admin-installations.html');
+    let html = fs.readFileSync(htmlPath, 'utf8');
+
+    const installations = payload.installations.map((installation) => ({
+      ...installation,
+      setup_url: `${installation.setup_url}&key=${encodeURIComponent(String(req.query.key || ''))}`
+    }));
+
+    html = html.replace('{{GENERATED_AT}}', validator.escape(new Date(payload.generated_at).toLocaleString()));
+    html = html.replace('{{SUMMARY_CARDS}}', renderSummaryCards(payload.summary));
+    html = html.replace('{{INSTALLATION_ROWS}}', renderInstallationRows(installations));
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    console.error('Error loading admin dashboard:', error);
+    res.status(500).send('Failed to load admin dashboard');
+  }
+});
 
 // Health endpoints for Kubernetes liveness/readiness probes
 app.get('/health', (req, res) => {

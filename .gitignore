@@ -3,9 +3,13 @@
 pages.db*
 node_modules
 test*
+!test/
+test/*
+!test/installations-tracking.test.js
 ProjectPlan
 SCALING_PLAN.md
 pages-proxy-env-secret*
 admin-installations.js
+!admin-installations.js
 check-key-format.js
 
