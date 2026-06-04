@@ -27,6 +27,10 @@ function getAdminApiKey() {
 }
 
 function safeEqual(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') {
+    return false;
+  }
+
   if (!left || !right || left.length !== right.length) {
     return false;
   }
@@ -44,7 +48,8 @@ function requireAdminAccess(req, res, next) {
     return res.status(404).send('Not found');
   }
 
-  const providedKey = req.get('x-admin-api-key') || req.query.key || '';
+  const queryKey = typeof req.query.key === 'string' ? req.query.key : '';
+  const providedKey = req.get('x-admin-api-key') || queryKey || '';
   if (!safeEqual(providedKey, configuredAdminKey)) {
     return res.status(401).send('Unauthorized');
   }
