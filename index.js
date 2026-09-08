@@ -193,13 +193,37 @@ const setupCompleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+function getInstallationId(query) {
+  const installationId = query.installation_id;
+  return typeof installationId === 'string' && /^\d+$/.test(installationId)
+    ? installationId
+    : null;
+}
+
+function redirectInstallationToSetup(req, res, next) {
+  const installationId = getInstallationId(req.query);
+  if (!installationId) {
+    return next();
+  }
+
+  const setupParams = new URLSearchParams({ installation_id: installationId });
+  if (typeof req.query.setup_action === 'string') {
+    setupParams.set('setup_action', req.query.setup_action);
+  }
+
+  return res.redirect(302, `/setup?${setupParams.toString()}`);
+}
+
+// GitHub appends installation_id and setup_action to the configured Setup URL.
+app.get(['/install', '/'], redirectInstallationToSetup);
+
 // Setup UI endpoints
 app.get('/setup', setupPageLimiter, async (req, res) => {
   try {
-    const installationId = req.query.installation_id;
+    const installationId = getInstallationId(req.query);
     
     // XSS protection: validate installation_id is numeric before using in HTML
-    if (!installationId || !/^\d+$/.test(installationId)) {
+    if (!installationId) {
       return res.status(400).send('Invalid or missing installation_id parameter. Must be a numeric GitHub App installation ID.');
     }
     
@@ -530,4 +554,8 @@ async function startServer() {
   }
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer };

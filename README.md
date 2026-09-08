@@ -108,6 +108,16 @@ The easiest way to use Pages Proxy is to install it directly from the GitHub Mar
 4. Grant access to the repositories that use GitHub Pages
 5. After installation, GitHub will redirect you to the setup page
 
+The GitHub App's **Setup URL** must be configured as:
+
+```text
+https://pages.redcloud.land/install
+```
+
+Do not add an `installation_id` placeholder. GitHub automatically appends the
+actual `installation_id` and `setup_action` query parameters, and `/install`
+redirects the user to the corresponding `/setup` page.
+
 #### Step 2: Configure Cloudflare Credentials
 
 You'll be redirected to a secure setup page where you enter your Cloudflare credentials:
@@ -218,7 +228,7 @@ To self-host, you need to create your own GitHub App (not use the Marketplace ap
 2. Configure:
    - **App name**: `Pages Proxy (Self-Hosted)` or similar
    - **Homepage URL**: Your deployment URL (e.g., `https://pages-proxy.yourdomain.com`)
-   - **Setup URL**: `https://your-host.com/setup?installation_id={installation_id}` (for per-user configuration)
+   - **Setup URL**: `https://your-host.com/install` (GitHub appends the installation ID automatically)
    - **Webhook URL**: `https://your-host.com/webhook` (must be HTTPS and publicly accessible)
    - **Webhook Secret**: Generate with `openssl rand -base64 32`
 3. Set **Permissions**:

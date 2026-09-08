@@ -8,6 +8,44 @@ process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0123456789abcdef0123
 process.env.DB_PATH = path.join(os.tmpdir(), `pages-proxy-installations-${process.pid}-${Date.now()}.db`);
 
 const database = require('../database');
+const request = require('supertest');
+const { app } = require('../index');
+
+test('redirects GitHub installation callbacks to the setup page', async () => {
+  const response = await request(app)
+    .get('/install')
+    .query({
+      installation_id: '500000',
+      setup_action: 'install'
+    });
+
+  assert.equal(response.status, 302);
+  assert.equal(
+    response.headers.location,
+    '/setup?installation_id=500000&setup_action=install'
+  );
+});
+
+test('supports root callback URLs from existing GitHub App configuration', async () => {
+  const response = await request(app)
+    .get('/')
+    .query({ installation_id: '500000' });
+
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.location, '/setup?installation_id=500000');
+});
+
+test('renders setup after following the installation callback redirect', async () => {
+  const response = await request(app)
+    .get('/setup')
+    .query({
+      installation_id: '500000',
+      setup_action: 'install'
+    });
+
+  assert.equal(response.status, 200);
+  assert.match(response.text, /name="installation_id" value="500000"/);
+});
 
 test('tracks installation lifecycle before configuration is saved', async () => {
   const record = await database.upsertInstallationRecord({
