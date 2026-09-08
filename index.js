@@ -18,7 +18,7 @@ const webhookLimiter = rateLimit({
   legacyHeaders: false, // Disable the X-RateLimit-* headers
 });
 
-const { generateToken, setupTokenRefresh } = require('./utils/tokenManager');
+const { generateToken } = require('./utils/tokenManager');
 const app = express();
 
 // Trust forwarded client details only when the immediate proxy is explicitly
@@ -547,15 +547,14 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     console.log('Starting server initialization...');
-    console.log('Generating initial GitHub App token...');
-    
-    await generateToken();
-    
-    setupTokenRefresh();
-    
+
+    // Installation tokens are customer-scoped and generated on demand from
+    // the installation ID included in GitHub webhook payloads. A removed or
+    // stale test installation must not prevent the shared service from
+    // starting for every other customer.
     app.listen(port, () => {
       console.log(`Server is running on port ${port}`);
-      console.log('Token refresh schedule is active');
+      console.log('GitHub installation tokens will be generated on demand');
     });
   } catch (error) {
     console.error('Failed to start server:', error);

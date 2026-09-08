@@ -6,7 +6,6 @@ let fetch;
 const crypto = require('crypto');
 const db = require('./database');
 const cloudflare = require('./cloudflare');
-const { checkAndRefreshToken } = require('./utils/tokenManager');
 const logger = require('./utils/logger');
 
 function verifyWebhookSignature(payload, signature, secret) {
@@ -84,7 +83,6 @@ async function handleWebhook(req, res) {
   console.log('Webhook signature verified successfully');
 
   try {
-    await checkAndRefreshToken();
     switch (event) {
       case 'installation':
         await handleInstallationEvent(payload);
