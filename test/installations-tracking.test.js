@@ -6,17 +6,18 @@ const path = require('node:path');
 
 process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef';
 process.env.DB_PATH = path.join(os.tmpdir(), `pages-proxy-installations-${process.pid}-${Date.now()}.db`);
+process.env.TRUSTED_PROXIES = '192.0.2.10/32,198.51.100.20/32';
 
 const database = require('../database');
 const request = require('supertest');
 const { app } = require('../index');
 
-test('trusts forwarded client addresses only from the HAProxy hosts', () => {
+test('trusts forwarded client addresses only from configured proxy networks', () => {
   const trustProxy = app.get('trust proxy fn');
 
-  assert.equal(trustProxy('172.16.1.16'), true);
-  assert.equal(trustProxy('172.16.1.17'), true);
-  assert.equal(trustProxy('172.16.1.18'), false);
+  assert.equal(trustProxy('192.0.2.10'), true);
+  assert.equal(trustProxy('198.51.100.20'), true);
+  assert.equal(trustProxy('192.0.2.11'), false);
   assert.equal(trustProxy('127.0.0.1'), false);
   assert.equal(trustProxy('10.0.0.1'), false);
 });

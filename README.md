@@ -197,6 +197,10 @@ If self-hosting, create a `.env` file in the project root:
 PORT=3000
 DB_PATH=pages.db
 
+# Optional comma-separated proxy IP/CIDR allowlist. Leave unset when Express is
+# directly exposed. Example: TRUSTED_PROXIES=192.0.2.10/32,198.51.100.0/24
+TRUSTED_PROXIES=
+
 # Encryption key for storing Cloudflare credentials (generate with: openssl rand -base64 48)
 ENCRYPTION_KEY=<your_secure_64_character_encryption_key>
 
@@ -215,6 +219,7 @@ CLOUDFLARE_EMAIL=<account_email>
 
 **Notes**:
 - `ENCRYPTION_KEY` is **required** for encrypting stored Cloudflare credentials (min 32 characters)
+- `TRUSTED_PROXIES` enables Express proxy trust only for the listed proxy IPs or CIDRs; proxy trust is disabled when it is empty or unset
 - For containers/Kubernetes, mount the private key as a file and use `PRIVATE_KEY_PATH` instead of `GITHUB_APP_PRIVATE_KEY`
 - The app dynamically generates installation tokens—do not hardcode `GITHUB_APP_TOKEN`
 - Keep secrets secure and never commit them to version control
