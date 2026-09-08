@@ -20,6 +20,12 @@ const webhookLimiter = rateLimit({
 
 const { generateToken, setupTokenRefresh } = require('./utils/tokenManager');
 const app = express();
+
+// Only accept forwarded client details from the two HAProxy hosts in front of
+// this service. Requests reaching Express through any other peer cannot spoof
+// req.ip with X-Forwarded-For.
+app.set('trust proxy', ['172.16.1.16/32', '172.16.1.17/32']);
+
 const port = process.env.PORT || 3000;
 
 function getAdminApiKey() {

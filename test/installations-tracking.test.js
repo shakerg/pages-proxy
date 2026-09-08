@@ -11,6 +11,16 @@ const database = require('../database');
 const request = require('supertest');
 const { app } = require('../index');
 
+test('trusts forwarded client addresses only from the HAProxy hosts', () => {
+  const trustProxy = app.get('trust proxy fn');
+
+  assert.equal(trustProxy('172.16.1.16'), true);
+  assert.equal(trustProxy('172.16.1.17'), true);
+  assert.equal(trustProxy('172.16.1.18'), false);
+  assert.equal(trustProxy('127.0.0.1'), false);
+  assert.equal(trustProxy('10.0.0.1'), false);
+});
+
 test('redirects GitHub installation callbacks to the setup page', async () => {
   const response = await request(app)
     .get('/install')
