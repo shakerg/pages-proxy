@@ -363,7 +363,6 @@ curl -X POST http://localhost:3000/test-remove \
 
 ### Manual Operations
 - **POST** `/update-cname` - Manually create/update Cloudflare CNAME record
-- **POST** `/refresh-token` - Manually refresh GitHub App installation token
 
 ---
 
@@ -371,14 +370,14 @@ curl -X POST http://localhost:3000/test-remove \
 
 ### Components
 - **Webhook Handler**: Express server with signature verification (anti-spoofing)
-- **GitHub App Auth**: JWT-based authentication with automatic token refresh
+- **GitHub App Auth**: JWT-based authentication with short-lived, on-demand installation tokens
 - **Cloudflare Integration**: REST API calls for DNS record management
 - **SQLite Database**: Persistent storage for Pages URLs and custom domains
-- **Token Manager**: Caches installation tokens and refreshes before expiry
+- **Token Manager**: Caches installation tokens in process memory only and refreshes before expiry
 
 ### Security Features
 - **Webhook signature verification** (HMAC-SHA256) prevents spoofed requests
-- **Automatic token rotation** (installation tokens refreshed every 50 minutes)
+- **Memory-only installation tokens** (never persisted to SQLite, environment variables, or logs)
 - **Private key isolation** (mounted as file, never logged)
 - **HTTPS required** for webhook endpoint
 - **Minimal permissions** (Pages: Write, Contents: Read, Metadata: Read)
@@ -466,11 +465,6 @@ The app uses SQLite with the following tables:
 - `record_id` (TEXT) - Cloudflare DNS record ID
 - `repo_name` (TEXT) - Associated repository
 
-### `tokens`
-- `id` (INTEGER, PRIMARY KEY) - Row ID
-- `token` (TEXT) - GitHub App installation token
-- `expires_at` (TEXT) - ISO timestamp when token expires
-
 ### `installations`
 - `installation_id` (INTEGER, PRIMARY KEY) - GitHub App installation ID
 - `cloudflare_zone_id` (TEXT) - Per-installation Cloudflare zone ID
@@ -478,6 +472,8 @@ The app uses SQLite with the following tables:
 - `cloudflare_email` (TEXT, nullable) - Cloudflare email for legacy auth
 - `created_at` (TEXT) - ISO timestamp of creation
 - `updated_at` (TEXT) - ISO timestamp of last update
+
+Installation rows, including encrypted Cloudflare credentials, are deleted when GitHub sends an app-uninstall event. Legacy rows previously marked deleted are purged automatically at startup.
 
 ---
 

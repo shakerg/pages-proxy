@@ -173,6 +173,11 @@ async function ensureInstallationsSchema() {
     END
     WHERE lifecycle_status IS NULL OR lifecycle_status = ''
   `);
+
+  // Uninstalled GitHub Apps should not leave account metadata or encrypted
+  // Cloudflare credentials behind. Older releases retained these rows as
+  // lifecycle_status=deleted, so purge that legacy data during migration.
+  await runStatement('DELETE FROM installations WHERE deleted_at IS NOT NULL');
 }
 
 async function getInstallationRecordRaw(installationId) {
@@ -180,6 +185,19 @@ async function getInstallationRecordRaw(installationId) {
   return getSingleRow(
     'SELECT * FROM installations WHERE installation_id = ?',
     [installationId]
+  );
+}
+
+async function deleteInstallationRecord(installationId) {
+  await installationsSchemaReady;
+  const normalizedInstallationId = parseInt(installationId, 10);
+  if (Number.isNaN(normalizedInstallationId)) {
+    throw new Error('Invalid installation ID');
+  }
+
+  return runWithParams(
+    'DELETE FROM installations WHERE installation_id = ?',
+    [normalizedInstallationId]
   );
 }
 
@@ -295,12 +313,9 @@ db.serialize(() => {
     cname_record TEXT
   )`);
 
-  db.run(`CREATE TABLE IF NOT EXISTS tokens (
-    id TEXT PRIMARY KEY,
-    token TEXT,
-    expires_at TEXT,
-    created_at TEXT
-  )`);
+  // Installation access tokens are short-lived and can always be regenerated
+  // from the GitHub App private key. Remove the legacy plaintext token cache.
+  db.run('DROP TABLE IF EXISTS tokens');
 
   db.run(`CREATE TABLE IF NOT EXISTS installations (
     installation_id INTEGER PRIMARY KEY,
@@ -567,99 +582,6 @@ function getCloudflareRecordId(repoName) {
       resolve(row ? row.cname_record : null);
     });
   });
-}
-
-async function storeToken(tokenData) {
-  if (!tokenData || !tokenData.token || !tokenData.expires_at) {
-    return Promise.reject(new Error('Token data missing required fields'));
-  }
-  
-  const { token, expires_at } = tokenData;
-  const sanitizedToken = sanitizeString(token);
-  const sanitizedExpiresAt = sanitizeString(expires_at);
-  const now = new Date().toISOString();
-  
-  return new Promise((resolve, reject) => {
-    db.run('BEGIN TRANSACTION', (beginErr) => {
-      if (beginErr) {
-        console.error('Error beginning transaction:', beginErr);
-        return reject(beginErr);
-      }
-      
-      const stmt = db.prepare(`INSERT OR REPLACE INTO tokens (id, token, expires_at, created_at) VALUES (?, ?, ?, ?)`);
-      stmt.run('github_app_token', sanitizedToken, sanitizedExpiresAt, now, function (err) {
-        if (err) {
-          console.error(`Error storing token:`, err);
-          
-          db.run('ROLLBACK', (rollbackErr) => {
-            if (rollbackErr) console.error('Error rolling back transaction:', rollbackErr);
-            stmt.finalize();
-            return reject(err);
-          });
-        } else {
-          db.run('COMMIT', (commitErr) => {
-            if (commitErr) {
-              console.error('Error committing transaction:', commitErr);
-              
-              db.run('ROLLBACK', (rollbackErr) => {
-                if (rollbackErr) console.error('Error rolling back transaction:', rollbackErr);
-                stmt.finalize();
-                return reject(commitErr);
-              });
-            } else {
-              console.log(`Stored GitHub App token with expiry: ${sanitizedExpiresAt}`);
-              stmt.finalize();
-              resolve(tokenData);
-            }
-          });
-        }
-      });
-    });
-  });
-}
-
-async function getStoredToken() {
-  return new Promise((resolve, reject) => {
-    db.get(`SELECT token, expires_at FROM tokens WHERE id = ?`, ['github_app_token'], (err, row) => {
-      if (err) {
-        console.error('Error retrieving token from database:', err);
-        return reject(err);
-      }
-      
-      if (row) {
-        console.log(`Retrieved token from database with expiry: ${row.expires_at}`);
-      } else {
-        console.log('No token found in database');
-      }
-      
-      resolve(row);
-    });
-  });
-}
-
-async function isTokenExpired() {
-  try {
-    const tokenData = await getStoredToken();
-    if (!tokenData) return true; // No token stored, so it's expired
-    
-    const expiryTime = new Date(tokenData.expires_at).getTime();
-    const now = new Date().getTime();
-    
-    // Add a buffer of 5 minutes to ensure we refresh before actual expiration
-    const buffer = 5 * 60 * 1000; // 5 minutes in milliseconds
-    const isExpired = now + buffer >= expiryTime;
-    
-    if (isExpired) {
-      console.log('Token is expired or will expire soon');
-    } else {
-      console.log(`Token is still valid until ${tokenData.expires_at}`);
-    }
-    
-    return isExpired;
-  } catch (error) {
-    console.error('Error checking if token is expired:', error);
-    return true;
-  }
 }
 
 async function testStorePagesUrl(repoName, pagesUrl, customDomain) {
@@ -1057,10 +979,8 @@ module.exports = {
   storeCloudflareRecordId,
   testStorePagesUrl,
   testRemovePagesUrl,
-  storeToken,
-  getStoredToken,
-  isTokenExpired,
   upsertInstallationRecord,
+  deleteInstallationRecord,
   getInstallationRecord,
   listInstallationRecords,
   storeInstallationConfig,

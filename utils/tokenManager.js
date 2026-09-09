@@ -1,100 +1,74 @@
-const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-const database = require('../database');
 const Mutex = require('./mutex');
 const { withRetry } = require('./retry');
 const logger = require('./logger');
 require('dotenv').config();
 
 const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
-const GITHUB_INSTALLATION_ID = process.env.GITHUB_INSTALLATION_ID;
 const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY;
 
-let tokenCache = null;
-
+// Installation access tokens are deliberately memory-only. They are
+// short-lived and can be regenerated from the GitHub App private key.
+const tokenCache = new Map();
 const tokenMutex = new Mutex();
+const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
-/**
- * Determines if an error is retriable for token generation
- * @param {Error} error - The error to check
- * @returns {boolean} - Whether the error should be retried
- */
 function isRetriableError(error) {
-  // Retry on network errors and rate limiting
   if (error.name === 'FetchError') return true;
-  if (error.status === 429) return true; // Rate limiting
-  if (error.status >= 500) return true;  // Server errors
-  return false; 
+  if (error.status === 429) return true;
+  if (error.status >= 500) return true;
+  return false;
+}
+
+function getCachedToken(installationId) {
+  const cached = tokenCache.get(String(installationId));
+  if (!cached) return null;
+
+  if (new Date(cached.expiresAt).getTime() - EXPIRY_BUFFER_MS <= Date.now()) {
+    tokenCache.delete(String(installationId));
+    return null;
+  }
+
+  return cached.token;
 }
 
 /**
- * Generates a GitHub App Installation Access Token and stores it in the database
- * 
- * The token will have the following permissions based on the GitHub App:
- * - Contents: Read (to access repository content including CNAME files)
- * - Pages: Write (to read and manage GitHub Pages settings)
- * - Metadata: Read (for basic repository information)
- * 
- * @param {string|number} installationId - The GitHub App installation ID to generate token for (defaults to env GITHUB_INSTALLATION_ID)
- * @returns {Promise<string>} The installation access token
+ * Generate a short-lived GitHub App installation access token.
+ * Tokens are cached in memory only and are never written to SQLite,
+ * environment variables, or logs.
  */
-async function generateToken(installationId = null) {
-  const targetInstallationId = installationId || GITHUB_INSTALLATION_ID;
-  
-  // Use mutex to prevent multiple simultaneous token generation attempts
+async function generateToken(installationId) {
+  const targetInstallationId = installationId;
+  if (!targetInstallationId || !/^\d+$/.test(String(targetInstallationId))) {
+    throw new Error('A numeric GitHub installation ID is required');
+  }
+
   return tokenMutex.withLock(async () => {
+    const cachedToken = getCachedToken(targetInstallationId);
+    if (cachedToken) {
+      return cachedToken;
+    }
+
     try {
-      logger.info(`Generating new GitHub App installation token for installation ${targetInstallationId}...`);
-      
-      // Only use cache if it's for the same installation ID and not expired
-      if (tokenCache && 
-          tokenCache.installationId === targetInstallationId && 
-          tokenCache.expiresAt && 
-          new Date(tokenCache.expiresAt) > new Date()) {
-        logger.info('Using cached token');
-        process.env.GITHUB_APP_TOKEN = tokenCache.token;
-        return tokenCache.token;
-      }
-      
-      // Only check database for default installation (backward compatibility)
-      if (!installationId) {
-        const isExpired = await database.isTokenExpired();
-        if (!isExpired) {
-          const tokenData = await database.getStoredToken();
-          if (tokenData && tokenData.token) {
-            logger.info('Using existing valid token from database');
-            process.env.GITHUB_APP_TOKEN = tokenData.token;
-            
-            tokenCache = {
-              token: tokenData.token,
-              expiresAt: tokenData.expires_at,
-              installationId: targetInstallationId
-            };
-            
-            return tokenData.token;
-          }
-        }
-      }
-      
-      return withRetry(
+      return await withRetry(
         async () => {
-          const payload = {
-            iat: Math.floor(Date.now() / 1000), // Issued at time
-            exp: Math.floor(Date.now() / 1000) + (10 * 60), // Expiration time (10 minutes)
-            iss: GITHUB_APP_ID, // GitHub App ID
-          };
-          
-          const token = jwt.sign(payload, GITHUB_APP_PRIVATE_KEY, { algorithm: 'RS256' });
-          
+          const now = Math.floor(Date.now() / 1000);
+          const appJwt = jwt.sign({
+            iat: now - 60,
+            exp: now + (10 * 60),
+            iss: GITHUB_APP_ID,
+          }, GITHUB_APP_PRIVATE_KEY, { algorithm: 'RS256' });
+
           const response = await fetch(`https://api.github.com/app/installations/${targetInstallationId}/access_tokens`, {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${appJwt}`,
               Accept: 'application/vnd.github.v3+json',
+              'User-Agent': 'pages-proxy'
             },
           });
-          
+
           if (!response.ok) {
             const errorText = await response.text();
             throw Object.assign(
@@ -102,25 +76,13 @@ async function generateToken(installationId = null) {
               { status: response.status }
             );
           }
-          
+
           const data = await response.json();
-          logger.info(`Installation Access Token generated successfully for ${targetInstallationId}, expires:`, data.expires_at);
-          
-          // Only store in database for default installation (backward compatibility)
-          if (!installationId) {
-            await database.storeToken({
-              token: data.token,
-              expires_at: data.expires_at
-            });
-          }
-          
-          tokenCache = {
+          tokenCache.set(String(targetInstallationId), {
             token: data.token,
-            expiresAt: data.expires_at,
-            installationId: targetInstallationId
-          };
-          
-          process.env.GITHUB_APP_TOKEN = data.token;
+            expiresAt: data.expires_at
+          });
+          logger.info(`Generated short-lived GitHub App token for installation ${targetInstallationId}`);
           return data.token;
         },
         {
@@ -132,70 +94,20 @@ async function generateToken(installationId = null) {
       );
     } catch (error) {
       logger.error(`Error generating token for installation ${targetInstallationId}:`, error.message);
-      
-      // Only try database fallback for default installation
-      if (!installationId) {
-        try {
-          const tokenData = await database.getStoredToken();
-          if (tokenData && tokenData.token) {
-            logger.info('Falling back to existing token from database');
-            process.env.GITHUB_APP_TOKEN = tokenData.token;
-            return tokenData.token;
-          }
-        } catch (dbError) {
-          logger.error('Error retrieving token from database:', dbError);
-        }
-      }
-      
-      return process.env.GITHUB_APP_TOKEN;
+      throw error;
     }
   });
 }
 
-async function checkAndRefreshToken() {
-  try {
-    const isExpired = await database.isTokenExpired();
-    
-    if (isExpired) {
-      logger.info('Token is expired or will expire soon, refreshing...');
-      await generateToken();
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    logger.error('Error checking token expiration:', error);
-    return false;
+function invalidateCache(installationId = null) {
+  if (installationId === null) {
+    tokenCache.clear();
+    return;
   }
-}
-
-function setupTokenRefresh() {
-  checkAndRefreshToken();
-  
-  const refreshInterval = 45 * 60 * 1000; 
-  setInterval(() => {
-    checkAndRefreshToken()
-      .then(wasRefreshed => {
-        if (wasRefreshed) {
-          logger.info('Token refreshed successfully');
-        } else {
-          logger.debug('Token still valid, no refresh needed');
-        }
-      })
-      .catch(err => logger.error('Failed to refresh token:', err.message));
-  }, refreshInterval);
-}
-
-/**
- * Invalidate the token cache - useful for testing or forced refreshes
- */
-function invalidateCache() {
-  tokenCache = null;
+  tokenCache.delete(String(installationId));
 }
 
 module.exports = {
   generateToken,
-  setupTokenRefresh,
-  checkAndRefreshToken,
   invalidateCache
 };

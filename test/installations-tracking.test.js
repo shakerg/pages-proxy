@@ -3,10 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const sqlite3 = require('sqlite3').verbose();
 
 process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef';
 process.env.DB_PATH = path.join(os.tmpdir(), `pages-proxy-installations-${process.pid}-${Date.now()}.db`);
 process.env.TRUSTED_PROXIES = '192.0.2.10/32,198.51.100.20/32';
+process.env.GITHUB_WEBHOOK_SECRET = 'test-webhook-secret';
 
 const database = require('../database');
 const request = require('supertest');
@@ -86,6 +89,56 @@ test('marks setup page visits without treating the installation as configured', 
   assert.equal(record.config_status, 'setup_viewed');
   assert.equal(record.lifecycle_status, 'active');
   assert.equal(record.cloudflare_api_token, undefined);
+});
+
+test('removes local installation data when GitHub sends an uninstall webhook', async () => {
+  const installationId = 500004;
+  await database.storeInstallationConfig(
+    installationId,
+    '4c18a91971a6076b06ffdd7f469d829c',
+    'test-token-value-1234567890abcdefghijkl',
+    'privacy@example.com'
+  );
+
+  const payload = JSON.stringify({
+    action: 'deleted',
+    installation: {
+      id: installationId,
+      account: { login: 'privacy-test', type: 'User' }
+    }
+  });
+  const signature = 'sha256=' + crypto
+    .createHmac('sha256', process.env.GITHUB_WEBHOOK_SECRET)
+    .update(payload)
+    .digest('hex');
+
+  const response = await request(app)
+    .post('/webhook')
+    .set('Content-Type', 'application/json')
+    .set('X-GitHub-Event', 'installation')
+    .set('X-Hub-Signature-256', signature)
+    .send(payload);
+
+  assert.equal(response.status, 200);
+  assert.equal(await database.getInstallationRecord(installationId), null);
+  assert.equal(await database.getInstallationConfig(installationId), null);
+});
+
+test('removes the legacy plaintext GitHub token table', async () => {
+  await database.getInstallationRecord(500000);
+  const tokenTable = await new Promise((resolve, reject) => {
+    const verificationDb = new sqlite3.Database(process.env.DB_PATH, sqlite3.OPEN_READONLY);
+    verificationDb.get(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tokens'",
+      (error, row) => {
+        verificationDb.close();
+        if (error) return reject(error);
+        resolve(row || null);
+      }
+    );
+  });
+
+  assert.equal(tokenTable, null);
 });
 
 test('stores encrypted credentials and exposes them only through getInstallationConfig', async () => {

@@ -18,7 +18,6 @@ const webhookLimiter = rateLimit({
   legacyHeaders: false, // Disable the X-RateLimit-* headers
 });
 
-const { generateToken } = require('./utils/tokenManager');
 const app = express();
 
 // Trust forwarded client details only when the immediate proxy is explicitly
@@ -522,20 +521,6 @@ app.post('/update-cname', async (req, res) => {
     console.error('Error updating CNAME record:', error);
     // Don't expose internal error details to user
     res.status(500).send('Failed to update CNAME record. Check server logs for details.');
-  }
-});
-
-app.post('/refresh-token', async (req, res) => {
-  try {
-    const token = await generateToken();
-    res.status(200).json({ 
-      message: 'Token refreshed successfully',
-      tokenPreview: token.substring(0, 5) + '...' // Show just a preview for security
-    });
-  } catch (error) {
-    console.error('Error refreshing token:', error);
-    // Don't expose internal error details to user
-    res.status(500).send('Failed to refresh token. Check server logs for details.');
   }
 });
 

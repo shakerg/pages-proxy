@@ -32,15 +32,10 @@ function verifyWebhookSignature(payload, signature, secret) {
   }
 }
 
-async function getOctokit(installationId = null) {
+async function getOctokit(installationId) {
   const { Octokit } = await import('@octokit/rest');
   const { generateToken } = require('./utils/tokenManager');
-  
-  // Generate token for specific installation if provided
-  const token = installationId 
-    ? await generateToken(installationId)
-    : process.env.GITHUB_APP_TOKEN;
-  
+  const token = await generateToken(installationId);
   return new Octokit({ auth: token });
 }
 
@@ -138,11 +133,13 @@ async function handleInstallationEvent(payload) {
     return;
   }
 
-  const overrides = {};
   if (action === 'deleted') {
-    overrides.deleted_at = new Date().toISOString();
+    const result = await db.deleteInstallationRecord(installation.id);
+    console.log(`Removed uninstalled GitHub App ${installation.id} from local storage (${result.changes} row(s))`);
+    return;
   }
 
+  const overrides = {};
   if (action === 'suspend') {
     overrides.suspended_at = new Date().toISOString();
   }

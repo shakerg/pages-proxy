@@ -230,23 +230,9 @@ async function deleteInstallation(id) {
     
     console.log(`✅ Installation ${id} deleted successfully from GitHub\n`);
 
-    await database.upsertInstallationRecord({
-      installation_id: parseInt(id, 10),
-      deleted_at: new Date().toISOString()
-    });
-    
-    // Optionally remove from local database
-    try {
-      const config = await database.getInstallationConfig(parseInt(id));
-      if (config) {
-        console.log(`🗄️  Database configuration found for this installation.`);
-        console.log(`   Note: Database cleanup is not automatic. You may want to manually remove`);
-        console.log(`   the configuration record from the installations table if no longer needed.\n`);
-      }
-    } catch (err) {
-      // Config not found, no action needed
-    }
-    
+    const result = await database.deleteInstallationRecord(parseInt(id, 10));
+    console.log(`🗄️  Removed ${result.changes} local installation record(s).\n`);
+
   } catch (error) {
     console.error(`❌ Error deleting installation ${id}:`, error.message);
     if (error.response) {

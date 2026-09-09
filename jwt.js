@@ -61,13 +61,9 @@ async function main() {
   try {
     console.log('Generating GitHub App installation token...');
     const accessToken = await getInstallationAccessToken();
-    console.log('Add this to your .env file:');
-    console.log(`GITHUB_APP_TOKEN=${accessToken}`);
-    
-    // Copilot - Add a message about using environment variable in the future
-    console.log('\nTo use the private key from the environment variable instead:');
-    console.log('1. Update jwt.js to use GITHUB_APP_PRIVATE_KEY instead of reading from file');
-    console.log('2. Make sure the private key in .env has proper line breaks (not \\n literals)');
+    // Never print or persist the short-lived access token.
+    console.log('GitHub App installation token generated successfully and kept in memory only.');
+    console.log(`Token length: ${accessToken.length}`);
   } catch (error) {
     console.error('Failed to generate token:', error.message);
   }
