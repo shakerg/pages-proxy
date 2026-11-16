@@ -159,7 +159,7 @@ If you prefer to run your own instance (for example, to customize behavior or ru
 
 #### Prerequisites
 
-- Node.js 20+
+- Node.js 20 or 22+
 - Docker (optional, for containerized deployment)
 - Kubernetes/OpenShift cluster (optional, for production deployment)
 - GitHub App credentials (App ID, Installation ID, Private Key, Webhook Secret)
