@@ -16,6 +16,7 @@
   "dependencies": {
     "@octokit/rest": "^21.1.1",
     "@octokit/webhooks": "^13.9.1",
+    "body-parser": "^2.4.0",
     "cloudflare": "^4.5.0",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
@@ -27,7 +28,9 @@
     "validator": "^13.15.35"
   },
   "overrides": {
+    "brace-expansion": "2.1.7",
     "form-data": "4.0.6",
+    "ip-address": "10.7.4",
     "tar-fs": "2.1.4",
     "tar": "^7.5.11",
     "node-gyp": "^11.2.0"
