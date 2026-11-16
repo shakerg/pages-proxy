@@ -10,6 +10,7 @@ process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '0123456789abcdef0123
 process.env.DB_PATH = path.join(os.tmpdir(), `pages-proxy-installations-${process.pid}-${Date.now()}.db`);
 process.env.TRUSTED_PROXIES = '192.0.2.10/32,198.51.100.20/32';
 process.env.GITHUB_WEBHOOK_SECRET = 'test-webhook-secret';
+process.env.ADMIN_API_KEY = 'test-admin-api-key';
 
 const database = require('../database');
 const request = require('supertest');
@@ -47,6 +48,33 @@ test('supports root callback URLs from existing GitHub App configuration', async
 
   assert.equal(response.status, 302);
   assert.equal(response.headers.location, '/setup?installation_id=500000');
+});
+
+test('requires admin access to update CNAME records', async () => {
+  const response = await request(app)
+    .post('/update-cname')
+    .send({
+      installation_id: '599999',
+      domain: 'example.com',
+      target: 'attacker.example'
+    });
+
+  assert.equal(response.status, 401);
+  assert.equal(response.text, 'Unauthorized');
+});
+
+test('allows authenticated admin requests to reach CNAME update handling', async () => {
+  const response = await request(app)
+    .post('/update-cname')
+    .set('x-admin-api-key', process.env.ADMIN_API_KEY)
+    .send({
+      installation_id: '599999',
+      domain: 'example.com',
+      target: 'pages.example'
+    });
+
+  assert.equal(response.status, 404);
+  assert.match(response.text, /No configuration found for installation 599999/);
 });
 
 test('renders setup after following the installation callback redirect', async () => {
