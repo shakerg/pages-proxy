@@ -489,7 +489,7 @@ app.post('/test-remove', async (req, res) => {
   }
 });
 
-app.post('/update-cname', async (req, res) => {
+app.post('/update-cname', requireAdminAccess, async (req, res) => {
   const { domain, target, installation_id } = req.body;
   try {
     let config = null;
